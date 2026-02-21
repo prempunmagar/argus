@@ -10,13 +10,13 @@ import {
 } from "@/components/categories/CategoryFormDialog"
 import { api } from "@/lib/api"
 import { mockCategories, mockPaymentMethods } from "@/lib/mock-data"
-import { useAgent } from "@/hooks/useAgent"
+import { useProfile } from "@/hooks/useProfile"
 import type { SpendingCategory, PaymentMethod } from "@/lib/types"
 
 const USE_MOCK = !import.meta.env.VITE_API_URL
 
 export function CategoriesPage() {
-  const { currentAgent } = useAgent()
+  const { currentProfile } = useProfile()
   const [categories, setCategories] = useState<SpendingCategory[]>([])
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
   const [loading, setLoading] = useState(true)
@@ -32,9 +32,9 @@ export function CategoriesPage() {
           setCategories(mockCategories)
           setPaymentMethods(mockPaymentMethods)
         } else {
-          const agentParam = currentAgent ? `?agent_id=${currentAgent.id}` : ""
+          const profileParam = currentProfile ? `?profile_id=${currentProfile.id}` : ""
           const [catRes, pmRes] = await Promise.all([
-            api.get(`/categories${agentParam}`),
+            api.get(`/categories${profileParam}`),
             api.get("/payment-methods").catch(() => ({ data: { payment_methods: [] } })),
           ])
           setCategories(catRes.data.categories)
@@ -48,7 +48,7 @@ export function CategoriesPage() {
       }
     }
     load()
-  }, [currentAgent])
+  }, [currentProfile])
 
   function openCreate() {
     setEditingCategory(undefined)
@@ -74,7 +74,7 @@ export function CategoriesPage() {
                     name: data.name,
                     description: data.description,
                     keywords: data.keywords,
-                    payment_method: selectedPm,
+                    payment_method: selectedPm ? { id: selectedPm.id, nickname: selectedPm.nickname, method_type: selectedPm.method_type } : undefined,
                     rules: data.rules.map((r, i) => ({
                       id: `rule-${Date.now()}-${i}`,
                       is_active: true,
@@ -94,8 +94,7 @@ export function CategoriesPage() {
             description: data.description,
             keywords: data.keywords,
             is_default: false,
-            display_order: categories.length,
-            payment_method: selectedPmCreate,
+            payment_method: selectedPmCreate ? { id: selectedPmCreate.id, nickname: selectedPmCreate.nickname, method_type: selectedPmCreate.method_type } : undefined,
             rules: data.rules.map((r, i) => ({
               id: `rule-${Date.now()}-${i}`,
               is_active: true,

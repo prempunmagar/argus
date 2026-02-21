@@ -30,17 +30,21 @@ export function formatRelativeTime(dateStr: string): string {
 
 export function statusColor(status: string): string {
   switch (status) {
-    case "APPROVED":
+    case "AI_APPROVED":
+    case "HUMAN_APPROVED":
     case "COMPLETED":
       return "text-green-600 bg-green-50 border-green-200"
-    case "DENIED":
-    case "EXPIRED":
+    case "AI_DENIED":
+    case "HUMAN_DENIED":
     case "FAILED":
       return "text-red-600 bg-red-50 border-red-200"
-    case "PENDING_APPROVAL":
+    case "HUMAN_NEEDED":
       return "text-amber-600 bg-amber-50 border-amber-200"
     case "PENDING_EVALUATION":
       return "text-blue-600 bg-blue-50 border-blue-200"
+    case "HUMAN_TIMEOUT":
+    case "EXPIRED":
+      return "text-gray-600 bg-gray-50 border-gray-200"
     default:
       return "text-gray-600 bg-gray-50 border-gray-200"
   }

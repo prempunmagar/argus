@@ -18,7 +18,7 @@ interface Props {
   onGenerate: (label: string) => string // returns the full key_value
 }
 
-export function AgentKeyCreateDialog({ open, onOpenChange, onGenerate }: Props) {
+export function ConnectionKeyCreateDialog({ open, onOpenChange, onGenerate }: Props) {
   const [label, setLabel] = useState("")
   const [generatedKey, setGeneratedKey] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
@@ -48,18 +48,18 @@ export function AgentKeyCreateDialog({ open, onOpenChange, onGenerate }: Props) 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Generate Agent Key</DialogTitle>
+          <DialogTitle>Generate Connection Key</DialogTitle>
           <DialogDescription>
-            Create a new API key for an AI shopping agent.
+            Create a new connection key for an AI shopping agent.
           </DialogDescription>
         </DialogHeader>
 
         {!generatedKey ? (
           <>
             <div className="space-y-2 py-1">
-              <Label htmlFor="ak-label">Label</Label>
+              <Label htmlFor="ck-label">Label</Label>
               <Input
-                id="ak-label"
+                id="ck-label"
                 placeholder="e.g., My Shopping Agent"
                 value={label}
                 onChange={(e: ChangeEvent<HTMLInputElement>) => setLabel(e.target.value)}

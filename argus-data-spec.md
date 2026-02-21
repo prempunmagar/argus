@@ -350,7 +350,8 @@ PENDING_EVALUATION
  └── HUMAN_NEEDED
       ├── HUMAN_APPROVED ──▶ COMPLETED
       │                 ──▶ EXPIRED
-      │                 ──▶ FAILED
+      │                 ──▶ 
+      
       ├── HUMAN_DENIED
       └── HUMAN_TIMEOUT
 ```

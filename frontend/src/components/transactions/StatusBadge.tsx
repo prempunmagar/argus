@@ -6,15 +6,23 @@ const config: Record<
   TransactionStatus,
   { label: string; className: string; pulse?: boolean }
 > = {
-  APPROVED: {
+  AI_APPROVED: {
+    label: "AI Approved",
+    className: "bg-green-50 text-green-700 border-green-200",
+  },
+  HUMAN_APPROVED: {
     label: "Approved",
     className: "bg-green-50 text-green-700 border-green-200",
   },
-  DENIED: {
+  AI_DENIED: {
+    label: "AI Denied",
+    className: "bg-red-50 text-red-700 border-red-200",
+  },
+  HUMAN_DENIED: {
     label: "Denied",
     className: "bg-red-50 text-red-700 border-red-200",
   },
-  PENDING_APPROVAL: {
+  HUMAN_NEEDED: {
     label: "Pending Approval",
     className: "bg-amber-50 text-amber-700 border-amber-200",
   },
@@ -22,6 +30,10 @@ const config: Record<
     label: "Evaluating",
     className: "bg-blue-50 text-blue-700 border-blue-200",
     pulse: true,
+  },
+  HUMAN_TIMEOUT: {
+    label: "Timed Out",
+    className: "bg-gray-50 text-gray-600 border-gray-200",
   },
   COMPLETED: {
     label: "Completed",

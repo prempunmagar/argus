@@ -20,13 +20,13 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { useAuth } from "@/hooks/useAuth"
-import { AgentSwitcher } from "@/components/agents/AgentSwitcher"
+import { ProfileSwitcher } from "@/components/profiles/ProfileSwitcher"
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, path: "/" },
   { label: "Categories", icon: FolderKanban, path: "/categories" },
   { label: "Approvals", icon: ShieldCheck, path: "/approvals" },
-  { label: "Agent Keys", icon: KeyRound, path: "/agent-keys" },
+  { label: "Connection Keys", icon: KeyRound, path: "/connection-keys" },
 ]
 
 export function AppSidebar({ pendingCount = 0 }: { pendingCount?: number }) {
@@ -55,7 +55,7 @@ export function AppSidebar({ pendingCount = 0 }: { pendingCount?: number }) {
         </div>
       </SidebarHeader>
 
-      <AgentSwitcher />
+      <ProfileSwitcher />
 
       <SidebarContent>
         <SidebarGroup>

@@ -21,7 +21,7 @@ export function ApprovalsPage() {
     fetchTransactions()
   }, [fetchTransactions])
 
-  const pending = transactions.filter((t) => t.status === "PENDING_APPROVAL")
+  const pending = transactions.filter((t) => t.status === "HUMAN_NEEDED")
 
   const handleApprove = useCallback(
     async (id: string) => {
@@ -83,17 +83,17 @@ export function ApprovalsPage() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-medium">{t.product_name}</h3>
+                      <h3 className="font-medium">{t.request_data.product_name}</h3>
                       <StatusBadge status={t.status} />
                     </div>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground mt-1">
                       <span className="flex items-center gap-1">
                         <Store className="h-3.5 w-3.5" />
-                        {t.merchant_name}
+                        {t.request_data.merchant_name}
                       </span>
-                      {t.detected_category_name && (
+                      {t.evaluation?.category_name && (
                         <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium">
-                          {t.detected_category_name}
+                          {t.evaluation.category_name}
                         </span>
                       )}
                       <span className="flex items-center gap-1">
@@ -101,14 +101,14 @@ export function ApprovalsPage() {
                         Waiting for your decision
                       </span>
                     </div>
-                    {t.decision_reason && (
+                    {t.evaluation?.decision_reasoning && (
                       <p className="mt-2 text-sm text-muted-foreground">
-                        {t.decision_reason}
+                        {t.evaluation.decision_reasoning}
                       </p>
                     )}
                   </div>
                   <p className="text-lg font-semibold shrink-0">
-                    {formatCurrency(t.price, t.currency)}
+                    {formatCurrency(t.request_data.price, t.request_data.currency)}
                   </p>
                 </div>
 

@@ -56,7 +56,7 @@ export function CategoryCard({
             {c.payment_method && (
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <CreditCard className="h-3.5 w-3.5" />
-                <span>{c.payment_method.label}</span>
+                <span>{c.payment_method.nickname}</span>
               </div>
             )}
             {onEdit && (

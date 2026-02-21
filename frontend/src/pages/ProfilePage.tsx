@@ -102,7 +102,13 @@ export function ProfilePage() {
           setMethods((prev) =>
             prev.map((m) => {
               if (m.id === editingMethod.id) {
-                return { ...m, ...data }
+                return {
+                  ...m,
+                  nickname: data.nickname,
+                  method_type: data.method_type,
+                  detail: data.detail,
+                  is_default: data.is_default,
+                }
               }
               if (data.is_default && m.is_default) {
                 return { ...m, is_default: false }
@@ -114,8 +120,11 @@ export function ProfilePage() {
         } else {
           const newMethod: PaymentMethod = {
             id: `pm-${Date.now()}`,
-            ...data,
-            is_active: true,
+            nickname: data.nickname,
+            method_type: data.method_type,
+            detail: data.detail,
+            is_default: data.is_default,
+            status: "ACTIVE",
           }
           if (data.is_default) {
             setMethods((prev) => [

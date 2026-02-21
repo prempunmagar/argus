@@ -11,6 +11,7 @@ const labels: Record<string, string> = {
   MERCHANT_BLACKLIST: "Blacklist",
   ALWAYS_REQUIRE_APPROVAL: "Require approval",
   BLOCK_CATEGORY: "Blocked",
+  CUSTOM_RULE: "Custom",
 }
 
 function formatValue(rule: CategoryRule): string {

@@ -4,11 +4,11 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "./StatusBadge"
 import { formatCurrency, formatRelativeTime } from "@/lib/utils"
-import type { TransactionListItem } from "@/lib/types"
+import type { Transaction } from "@/lib/types"
 import { api } from "@/lib/api"
 
 interface Props {
-  transaction: TransactionListItem
+  transaction: Transaction
   onUpdate?: () => void
 }
 
@@ -44,18 +44,18 @@ export function TransactionCard({ transaction: t, onUpdate }: Props) {
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 mb-1">
-              <h3 className="font-medium text-sm truncate">{t.product_name}</h3>
+              <h3 className="font-medium text-sm truncate">{t.request_data.product_name}</h3>
               <StatusBadge status={t.status} />
             </div>
 
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span className="flex items-center gap-1">
                 <Store className="h-3 w-3" />
-                {t.merchant_name}
+                {t.request_data.merchant_name}
               </span>
-              {t.detected_category_name && (
+              {t.evaluation?.category_name && (
                 <span className="rounded-full bg-secondary px-2 py-0.5 text-[11px] font-medium">
-                  {t.detected_category_name}
+                  {t.evaluation.category_name}
                 </span>
               )}
               <span className="flex items-center gap-1">
@@ -70,21 +70,21 @@ export function TransactionCard({ transaction: t, onUpdate }: Props) {
               )}
             </div>
 
-            {t.decision_reason && t.status === "DENIED" && (
+            {t.evaluation?.decision_reasoning && (t.status === "AI_DENIED" || t.status === "HUMAN_DENIED") && (
               <p className="mt-2 text-xs text-red-600 line-clamp-2">
-                {t.decision_reason}
+                {t.evaluation.decision_reasoning}
               </p>
             )}
           </div>
 
           <div className="text-right shrink-0">
             <p className="font-semibold text-sm">
-              {formatCurrency(t.price, t.currency)}
+              {formatCurrency(t.request_data.price, t.request_data.currency)}
             </p>
           </div>
         </div>
 
-        {t.status === "PENDING_APPROVAL" && (
+        {t.status === "HUMAN_NEEDED" && (
           <div className="mt-3 flex gap-2 justify-end">
             <Button
               size="sm"

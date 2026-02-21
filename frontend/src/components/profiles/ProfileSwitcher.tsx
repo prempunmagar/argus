@@ -18,17 +18,17 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { useAgent } from "@/hooks/useAgent"
+import { useProfile } from "@/hooks/useProfile"
 
-export function AgentSwitcher() {
-  const { agents, currentAgent, switchAgent, createAgent } = useAgent()
+export function ProfileSwitcher() {
+  const { profiles, currentProfile, switchProfile, createProfile } = useProfile()
   const [createOpen, setCreateOpen] = useState(false)
   const [newName, setNewName] = useState("")
   const [newDesc, setNewDesc] = useState("")
 
   function handleCreate() {
     if (!newName.trim()) return
-    createAgent(newName.trim(), newDesc.trim() || undefined)
+    createProfile(newName.trim(), newDesc.trim() || undefined)
     setNewName("")
     setNewDesc("")
     setCreateOpen(false)
@@ -41,30 +41,30 @@ export function AgentSwitcher() {
           <DropdownMenuTrigger asChild>
             <button className="flex w-full items-center justify-between rounded-md border border-sidebar-border bg-sidebar-accent/50 px-3 py-2 text-sm text-sidebar-foreground hover:bg-sidebar-accent transition-colors">
               <span className="truncate font-medium">
-                {currentAgent?.name ?? "Select Agent"}
+                {currentProfile?.name ?? "Select Profile"}
               </span>
               <ChevronsUpDown className="ml-2 h-3.5 w-3.5 shrink-0 opacity-60" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
-            {agents.map((agent) => (
+            {profiles.map((profile) => (
               <DropdownMenuItem
-                key={agent.id}
-                onClick={() => switchAgent(agent.id)}
+                key={profile.id}
+                onClick={() => switchProfile(profile.id)}
                 className="gap-2"
               >
-                {agent.id === currentAgent?.id ? (
+                {profile.id === currentProfile?.id ? (
                   <Check className="h-3.5 w-3.5" />
                 ) : (
                   <span className="w-3.5" />
                 )}
-                <span className="truncate">{agent.name}</span>
+                <span className="truncate">{profile.name}</span>
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setCreateOpen(true)} className="gap-2">
               <Plus className="h-3.5 w-3.5" />
-              Create Agent
+              Create Profile
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -73,16 +73,16 @@ export function AgentSwitcher() {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Create Agent</DialogTitle>
+            <DialogTitle>Create Profile</DialogTitle>
             <DialogDescription>
-              Add a new AI shopping agent with its own categories and rules.
+              Add a new profile with its own spending categories and rules.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-1">
             <div className="space-y-2">
-              <Label htmlFor="agent-name">Name</Label>
+              <Label htmlFor="profile-name">Name</Label>
               <Input
-                id="agent-name"
+                id="profile-name"
                 placeholder="e.g., Office Supplies"
                 value={newName}
                 onChange={(e: ChangeEvent<HTMLInputElement>) =>
@@ -91,10 +91,10 @@ export function AgentSwitcher() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="agent-desc">Description (optional)</Label>
+              <Label htmlFor="profile-desc">Description (optional)</Label>
               <Input
-                id="agent-desc"
-                placeholder="What this agent is used for"
+                id="profile-desc"
+                placeholder="What this profile is used for"
                 value={newDesc}
                 onChange={(e: ChangeEvent<HTMLInputElement>) =>
                   setNewDesc(e.target.value)

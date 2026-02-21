@@ -43,6 +43,7 @@ const RULE_LABELS: Record<RuleType, string> = {
   MERCHANT_BLACKLIST: "Merchant blacklist",
   ALWAYS_REQUIRE_APPROVAL: "Always require approval",
   BLOCK_CATEGORY: "Block category",
+  CUSTOM_RULE: "Custom rule",
 }
 
 const MONETARY_RULES: RuleType[] = [
@@ -231,7 +232,7 @@ export function CategoryFormDialog({ open, onOpenChange, category, onSave, payme
                   <option value="">None (use default)</option>
                   {paymentMethods.map((pm) => (
                     <option key={pm.id} value={pm.id}>
-                      {pm.label}
+                      {pm.nickname}
                     </option>
                   ))}
                 </select>

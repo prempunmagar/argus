@@ -78,15 +78,15 @@ export function TransactionDetailPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-semibold">{txn.product_name}</h1>
+          <h1 className="text-xl font-semibold">{txn.request_data.product_name}</h1>
           <div className="flex items-center gap-2 mt-1">
             <StatusBadge status={txn.status} />
             <span className="text-sm text-muted-foreground">
-              {txn.merchant_name}
+              {txn.request_data.merchant_name}
             </span>
-            {txn.product_url && (
+            {txn.request_data.product_url && (
               <a
-                href={txn.product_url}
+                href={txn.request_data.product_url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-teal-600 hover:underline"
@@ -98,19 +98,19 @@ export function TransactionDetailPage() {
           </div>
         </div>
         <p className="text-2xl font-bold">
-          {formatCurrency(txn.price, txn.currency)}
+          {formatCurrency(txn.request_data.price, txn.request_data.currency)}
         </p>
       </div>
 
-      {txn.decision_reason && (
+      {txn.evaluation?.decision_reasoning && (
         <Card>
           <CardContent className="p-4 text-sm">
             <p
               className={
-                txn.decision === "DENY" ? "text-red-600" : "text-foreground"
+                txn.evaluation.decision === "DENY" ? "text-red-600" : "text-foreground"
               }
             >
-              {txn.decision_reason}
+              {txn.evaluation.decision_reasoning}
             </p>
           </CardContent>
         </Card>
@@ -168,7 +168,7 @@ export function TransactionDetailPage() {
       )}
 
       {/* Rules Evaluation */}
-      {txn.rules_checked && txn.rules_checked.length > 0 && (
+      {txn.evaluation?.rules_checked && txn.evaluation.rules_checked.length > 0 && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
@@ -178,7 +178,7 @@ export function TransactionDetailPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {txn.rules_checked.map((r, i) => (
+              {txn.evaluation.rules_checked.map((r, i) => (
                 <div
                   key={i}
                   className="flex items-center justify-between text-sm py-1.5"
@@ -244,7 +244,7 @@ export function TransactionDetailPage() {
       )}
 
       {/* Conversation Context */}
-      {txn.conversation_context && (
+      {txn.request_data.conversation_context && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-sm font-medium">
@@ -253,7 +253,7 @@ export function TransactionDetailPage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground italic">
-              "{txn.conversation_context}"
+              "{txn.request_data.conversation_context}"
             </p>
           </CardContent>
         </Card>
@@ -270,28 +270,16 @@ export function TransactionDetailPage() {
               label="Created"
               time={txn.created_at}
             />
-            {txn.decided_at && (
+            {txn.evaluation && (
               <TimelineItem
                 label={
-                  txn.decision === "APPROVE"
-                    ? "Approved"
-                    : txn.decision === "DENY"
-                      ? "Denied"
-                      : "Decision made"
+                  txn.evaluation.decision === "APPROVE"
+                    ? "AI Approved"
+                    : txn.evaluation.decision === "DENY"
+                      ? "AI Denied"
+                      : "Escalated to human"
                 }
-                time={txn.decided_at}
-              />
-            )}
-            {txn.approval_requested_at && (
-              <TimelineItem
-                label="Approval requested"
-                time={txn.approval_requested_at}
-              />
-            )}
-            {txn.approval_responded_at && (
-              <TimelineItem
-                label={`User ${txn.approved_by === "USER_APPROVE" ? "approved" : "denied"}`}
-                time={txn.approval_responded_at}
+                time={txn.created_at}
               />
             )}
           </div>

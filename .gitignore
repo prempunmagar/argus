@@ -42,3 +42,11 @@ pitch/
 
 # Local overrides
 *.local
+
+# Private guide / context MDs (only README.md + argus-data-spec.md tracked)
+CLAUDE.md
+CLAUDE-kes.md
+argus-kes-guide.md
+argus-prem-guide.md
+argus-project-overview.md
+argus_general_overview.md

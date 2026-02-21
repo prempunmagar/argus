@@ -3,14 +3,14 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { formatRelativeTime } from "@/lib/utils"
-import type { AgentKey } from "@/lib/types"
+import type { ConnectionKey } from "@/lib/types"
 
-export function AgentKeyCard({
-  agentKey,
+export function ConnectionKeyCard({
+  connectionKey,
   onRevoke,
 }: {
-  agentKey: AgentKey
-  onRevoke?: (key: AgentKey) => void
+  connectionKey: ConnectionKey
+  onRevoke?: (key: ConnectionKey) => void
 }) {
   return (
     <Card>
@@ -21,36 +21,36 @@ export function AgentKeyCard({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p className="text-sm font-medium truncate">{agentKey.label}</p>
+            <p className="text-sm font-medium truncate">{connectionKey.label}</p>
             <Badge
               variant="outline"
               className={
-                agentKey.is_active
+                connectionKey.is_active
                   ? "text-[10px] text-green-600 border-green-200 bg-green-50"
                   : "text-[10px] text-red-600 border-red-200 bg-red-50"
               }
             >
-              {agentKey.is_active ? "Active" : "Revoked"}
+              {connectionKey.is_active ? "Active" : "Revoked"}
             </Badge>
           </div>
           <div className="flex items-center gap-3 mt-0.5">
             <code className="text-xs text-muted-foreground font-mono">
-              {agentKey.key_prefix}...
+              {connectionKey.key_prefix}...
             </code>
-            {agentKey.last_used_at && (
+            {connectionKey.last_used_at && (
               <span className="text-xs text-muted-foreground">
-                Last used {formatRelativeTime(agentKey.last_used_at)}
+                Last used {formatRelativeTime(connectionKey.last_used_at)}
               </span>
             )}
           </div>
         </div>
 
-        {onRevoke && agentKey.is_active && (
+        {onRevoke && connectionKey.is_active && (
           <Button
             variant="ghost"
             size="sm"
             className="shrink-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-            onClick={() => onRevoke(agentKey)}
+            onClick={() => onRevoke(connectionKey)}
           >
             Revoke
           </Button>

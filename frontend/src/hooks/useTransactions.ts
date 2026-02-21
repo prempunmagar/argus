@@ -1,12 +1,12 @@
 import { useState, useCallback } from "react"
 import { api } from "@/lib/api"
 import { mockTransactions } from "@/lib/mock-data"
-import type { TransactionListItem, WSMessage } from "@/lib/types"
+import type { Transaction, TransactionStatus, WSMessage } from "@/lib/types"
 
 const USE_MOCK = !import.meta.env.VITE_API_URL
 
 export function useTransactions() {
-  const [transactions, setTransactions] = useState<TransactionListItem[]>([])
+  const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetchTransactions = useCallback(async () => {
@@ -34,40 +34,45 @@ export function useTransactions() {
           {
             id: msg.data.transaction_id,
             status: "PENDING_EVALUATION",
-            product_name: msg.data.product_name,
-            price: msg.data.price,
-            currency: "USD",
-            merchant_name: msg.data.merchant_name,
-            merchant_domain: "",
-            detected_category_name: null,
-            decision: null,
-            decision_reason: null,
-            virtual_card_last_four: null,
-            virtual_card_status: null,
+            request_data: {
+              product_name: msg.data.product_name,
+              price: msg.data.price,
+              currency: "USD",
+              merchant_name: msg.data.merchant_name,
+              merchant_domain: "",
+              merchant_url: "",
+            },
             created_at: new Date().toISOString(),
-            decided_at: null,
           },
           ...prev,
         ])
         break
 
-      case "TRANSACTION_DECIDED":
+      case "TRANSACTION_DECIDED": {
+        const newStatus: TransactionStatus =
+          msg.data.decision === "APPROVE"
+            ? "AI_APPROVED"
+            : msg.data.decision === "DENY"
+              ? "AI_DENIED"
+              : "HUMAN_NEEDED"
         setTransactions((prev) =>
           prev.map((t) =>
             t.id === msg.data.transaction_id
               ? {
                   ...t,
-                  status: msg.data.decision === "APPROVE" ? "APPROVED" : "DENIED",
-                  decision: msg.data.decision,
-                  decision_reason: msg.data.reason,
-                  detected_category_name: msg.data.category_name,
+                  status: newStatus,
+                  evaluation: {
+                    decision: msg.data.decision,
+                    category_name: msg.data.category_name,
+                    decision_reasoning: msg.data.reason,
+                  },
                   virtual_card_last_four: msg.data.virtual_card_last_four,
-                  decided_at: new Date().toISOString(),
                 }
               : t
           )
         )
         break
+      }
 
       case "APPROVAL_REQUIRED":
         setTransactions((prev) =>
@@ -75,10 +80,12 @@ export function useTransactions() {
             t.id === msg.data.transaction_id
               ? {
                   ...t,
-                  status: "PENDING_APPROVAL" as const,
-                  detected_category_name: msg.data.category_name,
-                  decision: "REQUIRE_APPROVAL" as const,
-                  decision_reason: msg.data.reason,
+                  status: "HUMAN_NEEDED" as const,
+                  evaluation: {
+                    decision: "HUMAN_NEEDED" as const,
+                    category_name: msg.data.category_name,
+                    decision_reasoning: msg.data.reason,
+                  },
                 }
               : t
           )

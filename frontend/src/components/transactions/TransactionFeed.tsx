@@ -1,10 +1,10 @@
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TransactionCard } from "./TransactionCard"
-import type { TransactionListItem } from "@/lib/types"
+import type { Transaction } from "@/lib/types"
 
 interface Props {
-  transactions: TransactionListItem[]
+  transactions: Transaction[]
   loading: boolean
   onUpdate?: () => void
 }

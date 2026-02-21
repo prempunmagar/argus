@@ -1,12 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { Toaster } from "@/components/ui/sonner"
-import { AgentProvider } from "@/hooks/useAgent"
+import { ProfileProvider } from "@/hooks/useProfile"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { LoginPage } from "@/pages/LoginPage"
 import { DashboardPage } from "@/pages/DashboardPage"
 import { CategoriesPage } from "@/pages/CategoriesPage"
 import { ApprovalsPage } from "@/pages/ApprovalsPage"
-import { AgentKeysPage } from "@/pages/AgentKeysPage"
+import { ConnectionKeysPage } from "@/pages/ConnectionKeysPage"
 import { ProfilePage } from "@/pages/ProfilePage"
 import { TransactionDetailPage } from "@/pages/TransactionDetailPage"
 
@@ -24,16 +24,16 @@ function App() {
         <Route
           element={
             <ProtectedRoute>
-              <AgentProvider>
+              <ProfileProvider>
                 <AppLayout />
-              </AgentProvider>
+              </ProfileProvider>
             </ProtectedRoute>
           }
         >
           <Route path="/" element={<DashboardPage />} />
           <Route path="/categories" element={<CategoriesPage />} />
           <Route path="/approvals" element={<ApprovalsPage />} />
-          <Route path="/agent-keys" element={<AgentKeysPage />} />
+          <Route path="/connection-keys" element={<ConnectionKeysPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/transactions/:id" element={<TransactionDetailPage />} />
         </Route>
