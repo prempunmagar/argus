@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node --version:*)",
+      "Bash(npm --version:*)",
+      "Bash(npm create:*)",
+      "Bash(npm install:*)",
+      "Bash(npx shadcn@latest add button card badge input label separator scroll-area skeleton tooltip dropdown-menu avatar toast progress dialog --yes)",
+      "Bash(npx shadcn@latest add:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm run build:*)",
+      "Bash(echo:*)",
+      "Bash(dir:*)",
+      "Bash(powershell -Command \"New-Item -ItemType Directory -Force -Path ''C:\\\\Users\\\\prems\\\\Downloads\\\\argus\\\\frontend\\\\src\\\\components\\\\ui''; Copy-Item -Path ''C:\\\\Users\\\\prems\\\\Downloads\\\\argus\\\\frontend\\\\@\\\\components\\\\ui\\\\*'' -Destination ''C:\\\\Users\\\\prems\\\\Downloads\\\\argus\\\\frontend\\\\src\\\\components\\\\ui\\\\'' -Force; Copy-Item -Path ''C:\\\\Users\\\\prems\\\\Downloads\\\\argus\\\\frontend\\\\@\\\\hooks\\\\use-mobile.ts'' -Destination ''C:\\\\Users\\\\prems\\\\Downloads\\\\argus\\\\frontend\\\\src\\\\hooks\\\\use-mobile.ts'' -Force\")",
+      "Bash(powershell -Command \"Remove-Item -Recurse -Force ''C:\\\\Users\\\\prems\\\\Downloads\\\\argus\\\\frontend\\\\@''\")",
+      "Bash(powershell -Command \"Copy-Item -Path ''C:\\\\Users\\\\prems\\\\Downloads\\\\argus\\\\frontend\\\\@\\\\components\\\\ui\\\\textarea.tsx'' -Destination ''C:\\\\Users\\\\prems\\\\Downloads\\\\argus\\\\frontend\\\\src\\\\components\\\\ui\\\\textarea.tsx'' -Force; Remove-Item -Recurse -Force ''C:\\\\Users\\\\prems\\\\Downloads\\\\argus\\\\frontend\\\\@''\")",
+      "Bash(npx vite build)",
+      "Bash(git remote set-url:*)",
+      "Bash(git add:*)"
+    ]
+  }
+}
