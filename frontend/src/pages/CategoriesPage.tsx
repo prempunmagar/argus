@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Plus } from "lucide-react"
+import { Plus, Layers } from "lucide-react"
 import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
@@ -73,7 +73,6 @@ export function CategoriesPage() {
                     ...c,
                     name: data.name,
                     description: data.description,
-                    keywords: data.keywords,
                     payment_method: selectedPm ? { id: selectedPm.id, nickname: selectedPm.nickname, method_type: selectedPm.method_type } : undefined,
                     rules: data.rules.map((r, i) => ({
                       id: `rule-${Date.now()}-${i}`,
@@ -92,7 +91,6 @@ export function CategoriesPage() {
             id: `cat-${Date.now()}`,
             name: data.name,
             description: data.description,
-            keywords: data.keywords,
             is_default: false,
             payment_method: selectedPmCreate ? { id: selectedPmCreate.id, nickname: selectedPmCreate.nickname, method_type: selectedPmCreate.method_type } : undefined,
             rules: data.rules.map((r, i) => ({
@@ -152,6 +150,24 @@ export function CategoriesPage() {
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-64 rounded-lg" />
           ))}
+        </div>
+      ) : categories.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
+            <Layers className="h-6 w-6 text-muted-foreground" />
+          </div>
+          <p className="text-sm font-medium">No categories yet</p>
+          <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+            Create spending categories to control how your AI agent handles purchases.
+          </p>
+          <Button
+            onClick={openCreate}
+            className="mt-4 bg-teal-600 hover:bg-teal-700 text-white gap-1.5"
+            size="sm"
+          >
+            <Plus className="h-4 w-4" />
+            Add Category
+          </Button>
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">

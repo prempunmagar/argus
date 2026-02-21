@@ -95,7 +95,7 @@ export interface VirtualCard {
 export interface PaymentMethod {
   id: string
   nickname: string
-  method_type: "CREDIT_CARD" | "DEBIT_CARD" | "BANK_ACCOUNT" | "CRYPTO_WALLET"
+  method_type: "CARD" | "BANK_ACCOUNT" | "CRYPTO_WALLET"
   status: string
   is_default: boolean
   detail: Record<string, any>
@@ -106,7 +106,6 @@ export interface SpendingCategory {
   id: string
   name: string
   description?: string
-  keywords: string[]
   is_default: boolean
   payment_method?: { id: string; nickname: string; method_type: string }
   rules: CategoryRule[]

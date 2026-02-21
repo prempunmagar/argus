@@ -1,4 +1,4 @@
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { ShoppingBag } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { TransactionCard } from "./TransactionCard"
 import type { Transaction } from "@/lib/types"
@@ -6,10 +6,9 @@ import type { Transaction } from "@/lib/types"
 interface Props {
   transactions: Transaction[]
   loading: boolean
-  onUpdate?: () => void
 }
 
-export function TransactionFeed({ transactions, loading, onUpdate }: Props) {
+export function TransactionFeed({ transactions, loading }: Props) {
   if (loading) {
     return (
       <div className="space-y-3">
@@ -22,22 +21,23 @@ export function TransactionFeed({ transactions, loading, onUpdate }: Props) {
 
   if (transactions.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-        <p className="text-sm">No transactions yet</p>
-        <p className="text-xs mt-1">
-          Transactions will appear here when your AI agent makes purchases.
+      <div className="flex flex-col items-center justify-center py-20 text-center">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
+          <ShoppingBag className="h-6 w-6 text-muted-foreground" />
+        </div>
+        <p className="text-sm font-medium">No transactions yet</p>
+        <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+          Transactions will appear here in real time when your AI agent makes purchases.
         </p>
       </div>
     )
   }
 
   return (
-    <ScrollArea className="h-[calc(100vh-12rem)]">
-      <div className="space-y-3 pr-4">
-        {transactions.map((t) => (
-          <TransactionCard key={t.id} transaction={t} onUpdate={onUpdate} />
-        ))}
-      </div>
-    </ScrollArea>
+    <div className="space-y-3">
+      {transactions.map((t) => (
+        <TransactionCard key={t.id} transaction={t} />
+      ))}
+    </div>
   )
 }

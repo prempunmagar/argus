@@ -18,10 +18,11 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
 import { useProfile } from "@/hooks/useProfile"
 
 export function ProfileSwitcher() {
-  const { profiles, currentProfile, switchProfile, createProfile } = useProfile()
+  const { profiles, currentProfile, loading, switchProfile, createProfile } = useProfile()
   const [createOpen, setCreateOpen] = useState(false)
   const [newName, setNewName] = useState("")
   const [newDesc, setNewDesc] = useState("")
@@ -32,6 +33,14 @@ export function ProfileSwitcher() {
     setNewName("")
     setNewDesc("")
     setCreateOpen(false)
+  }
+
+  if (loading) {
+    return (
+      <div className="px-4 py-2">
+        <Skeleton className="h-9 w-full rounded-md" />
+      </div>
+    )
   }
 
   return (

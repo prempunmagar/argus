@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, type ChangeEvent } from "react"
+import { useState, useCallback, type ChangeEvent } from "react"
 import { ShieldCheck, Clock, Store } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -6,20 +6,12 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatusBadge } from "@/components/transactions/StatusBadge"
 import { useTransactions } from "@/hooks/useTransactions"
-import { useWebSocket } from "@/hooks/useWebSocket"
 import { formatCurrency } from "@/lib/utils"
 import { api } from "@/lib/api"
 
 export function ApprovalsPage() {
-  const { transactions, loading, fetchTransactions, handleWSMessage } =
-    useTransactions()
+  const { transactions, loading, fetchTransactions } = useTransactions()
   const [notes, setNotes] = useState<Record<string, string>>({})
-
-  useWebSocket(handleWSMessage)
-
-  useEffect(() => {
-    fetchTransactions()
-  }, [fetchTransactions])
 
   const pending = transactions.filter((t) => t.status === "HUMAN_NEEDED")
 

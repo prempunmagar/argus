@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom"
 import { Toaster } from "@/components/ui/sonner"
 import { ProfileProvider } from "@/hooks/useProfile"
+import { TransactionProvider } from "@/hooks/useTransactions"
 import { AppLayout } from "@/components/layout/AppLayout"
 import { LoginPage } from "@/pages/LoginPage"
 import { DashboardPage } from "@/pages/DashboardPage"
@@ -25,7 +26,9 @@ function App() {
           element={
             <ProtectedRoute>
               <ProfileProvider>
-                <AppLayout />
+                <TransactionProvider>
+                  <AppLayout />
+                </TransactionProvider>
               </ProfileProvider>
             </ProtectedRoute>
           }

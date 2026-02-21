@@ -4,24 +4,29 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { StatusBadge } from "./StatusBadge"
 import { formatCurrency, formatRelativeTime } from "@/lib/utils"
+import { useTransactions } from "@/hooks/useTransactions"
 import type { Transaction } from "@/lib/types"
 import { api } from "@/lib/api"
 
+const USE_MOCK = !import.meta.env.VITE_API_URL
+
 interface Props {
   transaction: Transaction
-  onUpdate?: () => void
 }
 
-export function TransactionCard({ transaction: t, onUpdate }: Props) {
+export function TransactionCard({ transaction: t }: Props) {
   const navigate = useNavigate()
+  const { updateTransaction } = useTransactions()
 
   const handleApprove = async (e: React.MouseEvent) => {
     e.stopPropagation()
     try {
       await api.post(`/transactions/${t.id}/approve`)
-      onUpdate?.()
     } catch {
-      // silently fail for mock mode
+      // mock mode
+    }
+    if (USE_MOCK) {
+      updateTransaction(t.id, { status: "HUMAN_APPROVED" })
     }
   }
 
@@ -29,11 +34,17 @@ export function TransactionCard({ transaction: t, onUpdate }: Props) {
     e.stopPropagation()
     try {
       await api.post(`/transactions/${t.id}/deny`)
-      onUpdate?.()
     } catch {
-      // silently fail for mock mode
+      // mock mode
+    }
+    if (USE_MOCK) {
+      updateTransaction(t.id, { status: "HUMAN_DENIED" })
     }
   }
+
+  const showReasoning =
+    t.evaluation?.decision_reasoning &&
+    (t.status === "AI_DENIED" || t.status === "HUMAN_DENIED" || t.status === "HUMAN_NEEDED")
 
   return (
     <Card
@@ -65,14 +76,20 @@ export function TransactionCard({ transaction: t, onUpdate }: Props) {
               {t.virtual_card_last_four && (
                 <span className="flex items-center gap-1">
                   <CreditCard className="h-3 w-3" />
-                  ••{t.virtual_card_last_four}
+                  Card ••{t.virtual_card_last_four}
                 </span>
               )}
             </div>
 
-            {t.evaluation?.decision_reasoning && (t.status === "AI_DENIED" || t.status === "HUMAN_DENIED") && (
-              <p className="mt-2 text-xs text-red-600 line-clamp-2">
-                {t.evaluation.decision_reasoning}
+            {showReasoning && (
+              <p
+                className={`mt-2 text-xs line-clamp-2 ${
+                  t.status === "HUMAN_NEEDED"
+                    ? "text-amber-700"
+                    : "text-red-600"
+                }`}
+              >
+                {t.evaluation!.decision_reasoning}
               </p>
             )}
           </div>

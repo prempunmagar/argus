@@ -1,5 +1,5 @@
-import { useState, useEffect, type KeyboardEvent, type ChangeEvent } from "react"
-import { Plus, Trash2, X } from "lucide-react"
+import { useState, useEffect, type ChangeEvent } from "react"
+import { Plus, Trash2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -11,7 +11,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -20,7 +19,6 @@ import type { SpendingCategory, RuleType, PaymentMethod } from "@/lib/types"
 export interface CategoryFormData {
   name: string
   description: string
-  keywords: string[]
   rules: { rule_type: RuleType; value: string }[]
   payment_method_id: string
 }
@@ -83,8 +81,6 @@ export function CategoryFormDialog({ open, onOpenChange, category, onSave, payme
 
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [keywords, setKeywords] = useState<string[]>([])
-  const [keywordInput, setKeywordInput] = useState("")
   const [rules, setRules] = useState<{ rule_type: RuleType; value: string }[]>([])
   const [paymentMethodId, setPaymentMethodId] = useState("")
   const [saving, setSaving] = useState(false)
@@ -93,8 +89,6 @@ export function CategoryFormDialog({ open, onOpenChange, category, onSave, payme
     if (open) {
       setName(category?.name ?? "")
       setDescription(category?.description ?? "")
-      setKeywords(category?.keywords ?? [])
-      setKeywordInput("")
       setRules(
         category?.rules.map((r) => ({ rule_type: r.rule_type, value: r.value })) ?? []
       )
@@ -105,25 +99,6 @@ export function CategoryFormDialog({ open, onOpenChange, category, onSave, payme
 
   const usedRuleTypes = new Set(rules.map((r) => r.rule_type))
   const availableRuleTypes = ALL_RULE_TYPES.filter((rt) => !usedRuleTypes.has(rt))
-
-  function addKeyword() {
-    const kw = keywordInput.trim().toLowerCase()
-    if (kw && !keywords.includes(kw)) {
-      setKeywords((prev) => [...prev, kw])
-    }
-    setKeywordInput("")
-  }
-
-  function removeKeyword(kw: string) {
-    setKeywords((prev) => prev.filter((k) => k !== kw))
-  }
-
-  function handleKeywordKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
-      e.preventDefault()
-      addKeyword()
-    }
-  }
 
   function addRule() {
     if (availableRuleTypes.length === 0) return
@@ -167,7 +142,6 @@ export function CategoryFormDialog({ open, onOpenChange, category, onSave, payme
     onSave({
       name: name.trim(),
       description: description.trim(),
-      keywords,
       rules: finalRules,
       payment_method_id: paymentMethodId,
     })
@@ -238,56 +212,6 @@ export function CategoryFormDialog({ open, onOpenChange, category, onSave, payme
                 </select>
               </div>
             )}
-
-            <Separator />
-
-            {/* Keywords */}
-            <div className="space-y-2">
-              <Label>Keywords</Label>
-              <p className="text-xs text-muted-foreground">
-                Keywords help match purchases to this category.
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Type a keyword and press Enter"
-                  value={keywordInput}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                    setKeywordInput(e.target.value)
-                  }
-                  onKeyDown={handleKeywordKeyDown}
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addKeyword}
-                  className="shrink-0"
-                >
-                  Add
-                </Button>
-              </div>
-              {keywords.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {keywords.map((kw) => (
-                    <Badge
-                      key={kw}
-                      variant="secondary"
-                      className="text-xs gap-1 pr-1"
-                    >
-                      {kw}
-                      <button
-                        type="button"
-                        onClick={() => removeKeyword(kw)}
-                        className="ml-0.5 rounded-full hover:bg-foreground/10 p-0.5"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </div>
 
             <Separator />
 
@@ -420,13 +344,9 @@ function RuleRow({
                 : ""
           }
           value={displayValue}
-          onChange={(e: ChangeEvent<HTMLInputElement>) => {
-            if (isMerchantList) {
-              onChange("value", e.target.value)
-            } else {
-              onChange("value", e.target.value)
-            }
-          }}
+          onChange={(e: ChangeEvent<HTMLInputElement>) =>
+            onChange("value", e.target.value)
+          }
           className="flex-1"
         />
       )}

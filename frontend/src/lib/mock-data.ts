@@ -141,7 +141,7 @@ export const mockPaymentMethods: PaymentMethod[] = [
   {
     id: "pm_visa_001",
     nickname: "Work Visa Card",
-    method_type: "CREDIT_CARD",
+    method_type: "CARD",
     status: "active",
     is_default: true,
     detail: { brand: "visa", last4: "4242", exp_month: 12, exp_year: 2028 },
@@ -149,7 +149,7 @@ export const mockPaymentMethods: PaymentMethod[] = [
   {
     id: "pm_amex_001",
     nickname: "Travel Amex Card",
-    method_type: "CREDIT_CARD",
+    method_type: "CARD",
     status: "active",
     is_default: false,
     detail: { brand: "amex", last4: "1234", exp_month: 6, exp_year: 2027 },
@@ -182,12 +182,12 @@ export const mockCategories: SpendingCategory[] = [
     id: "cat_footwear_001",
     name: "Footwear",
     description: "This category covers all footwear purchases including sneakers, running shoes, boots, sandals, and slippers. Only buy from well-known retailers like Nike, Zappos, Amazon, and Target. Avoid reseller or auction sites. Purchases under $80 from whitelisted merchants can be auto-approved.",
-    keywords: ["shoes", "sneakers", "boots", "running shoes", "sandals", "slippers"],
+
     is_default: false,
     payment_method: {
       id: "pm_visa_001",
       nickname: "Work Visa Card",
-      method_type: "CREDIT_CARD",
+      method_type: "CARD",
     },
     rules: [
       { id: "r1", rule_type: "MAX_PER_TRANSACTION", value: "200.00", is_active: true },
@@ -208,12 +208,11 @@ export const mockCategories: SpendingCategory[] = [
     id: "cat_electronics_001",
     name: "Electronics",
     description: "Covers computers, phones, tablets, monitors, peripherals, and tech accessories. Prefer purchases from Amazon, Best Buy, and manufacturer stores (apple.com, dell.com). Items under $100 like cables and small accessories can be auto-approved. Anything over $500 must be flagged for manual review. Do not purchase refurbished or open-box items unless the user specifically asks for them.",
-    keywords: ["laptop", "phone", "headphones", "charger", "tablet", "computer", "monitor", "keyboard"],
     is_default: false,
     payment_method: {
       id: "pm_amex_001",
       nickname: "Travel Amex Card",
-      method_type: "CREDIT_CARD",
+      method_type: "CARD",
     },
     rules: [
       { id: "r5", rule_type: "MAX_PER_TRANSACTION", value: "500.00", is_active: true },
@@ -228,12 +227,11 @@ export const mockCategories: SpendingCategory[] = [
     id: "cat_travel_001",
     name: "Travel",
     description: "Covers flights, hotels, car rentals, Airbnb stays, and travel accessories like luggage. All travel purchases require manual approval regardless of amount. Prefer booking through Marriott, Airbnb, Booking.com, Expedia, or airline direct sites. Budget hotels under $200/night are acceptable. Flag any first-class or business-class flights for review.",
-    keywords: ["flight", "hotel", "airbnb", "booking", "rental car", "luggage", "travel"],
     is_default: false,
     payment_method: {
       id: "pm_amex_001",
       nickname: "Travel Amex Card",
-      method_type: "CREDIT_CARD",
+      method_type: "CARD",
     },
     rules: [
       { id: "r8", rule_type: "MAX_PER_TRANSACTION", value: "2000.00", is_active: true },
@@ -248,7 +246,6 @@ export const mockCategories: SpendingCategory[] = [
     id: "cat_general_001",
     name: "General",
     description: "Catch-all category for purchases that don't match any other category. Auto-approve small everyday items under $50 like household goods or office supplies. Anything above $50 should be flagged for review. Be cautious with unfamiliar merchants — if the merchant seems suspicious or unrelated to the user's request, deny the purchase.",
-    keywords: [],
     is_default: true,
     rules: [
       { id: "r11", rule_type: "MAX_PER_TRANSACTION", value: "500.00", is_active: true },
