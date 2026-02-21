@@ -6,163 +6,246 @@ Argus is an AI agent payment authorization system being built for the LIVE AI Iv
 
 ## Who Am I (The Developer Using This CLI)?
 
-I am **Prem** — I own the frontend, shopping agent, pitch, and project management. See `argus-prem-guide.md` for my full build guide.
+I am the **Backend Builder** — I own the backend API, ADK plugin, A2A endpoint, database, and deployment. See `argus-teammate-guide.md` for my full build guide.
 
 ## My Scope — What I Build
 
-1. **Web Dashboard** — React + Vite + TailwindCSS + shadcn/ui (in `frontend/`)
-2. **ADK Shopping Agent** — Google ADK + Gemini Computer Use (in `agent/shopping_agent/` and `agent/run_agent.py`)
-3. **Pitch & Video** — Script, slides, screen recording (in `pitch/`)
+1. **Argus Core API** — FastAPI, all endpoints, all services, database (in `backend/`)
+2. **Argus ADK Plugin** — `before_tool_callback` that intercepts agent purchase calls (in `agent/argus_plugin/`)
+3. **A2A Endpoint** — Google's Agent-to-Agent protocol for discoverability (in `backend/a2a/`)
+4. **Database** — SQLAlchemy models, seed data
+5. **Deployment** — Docker, Dockploy (backend), Vercel config (frontend)
+6. **Documentation** — README.md, ARCHITECTURE.md
 
 ## What I Do NOT Touch
 
-- `backend/` — My teammate builds this (FastAPI, database, all API endpoints)
-- `agent/argus_plugin/` — My teammate builds the ADK plugin
-- `docker-compose.yml`, `Dockerfile` — My teammate handles deployment
+- `frontend/` — Prem builds the React dashboard
+- `agent/shopping_agent/` — Prem builds the shopping agent
+- `agent/run_agent.py` — Prem's agent runner
+- Pitch materials
+
+# Build Rules (FOLLOW THESE)
+
+1. **Small steps, manual verification.** Each milestone is broken into small steps. Implement ONE step at a time. Each step must produce code the developer can review and manually test. Stop after each step and wait for the developer to confirm before proceeding.
+2. **Consult on test failures.** If a test or verification fails 2-3 times, STOP and explain the problem to the developer. Do not silently keep trying fixes. The developer wants to be involved and understand what's going wrong.
+3. **Update MILESTONES.md as we go.** After completing each step, update `MILESTONES.md` — check off completed tasks, add any design decisions to the Notes section, and add an entry to the Change Log. Anyone picking up this project mid-build should be able to read MILESTONES.md and know exactly where things stand.
+4. **Update ALL context files when we make changes.** Whenever we add, remove, or rename a field, table, endpoint, or any structural element: do a **project-wide search** (grep the entire Argus directory) for every reference to the changed item. Update ALL files that mention it — code files, spec docs (argus-data-spec, argus-kes-guide, argus-project-overview), CLAUDE.md, MILESTONES.md, and any other context or rules files. Never assume only one file is affected. Docs must always stay in sync with reality.
 
 ## Key Reference Documents (READ THESE)
 
-- **`argus-data-spec.md`** — THE source of truth for all API contracts, database schemas, TypeScript types, WebSocket messages, Gemini prompts, and seed data. Reference this for every integration point.
-- **`argus-prem-guide.md`** — My detailed build guide with hour-by-hour plan, component structure, page-by-page instructions, and code snippets.
-- **`argus-project-overview.md`** — High-level architecture, core flow, tech stack, branding, demo scenarios.
-- **`argus-teammate-guide.md`** — What my teammate is building. Useful for understanding what APIs I'll consume.
+- **`argus-data-spec.md`** — THE source of truth for all API contracts, database schemas, request/response shapes, WebSocket messages, Gemini prompts, seed data, and rules engine logic. Reference this for EVERY endpoint and integration point.
+- **`argus-teammate-guide.md`** — My detailed build guide with code snippets for every component I build.
+- **`argus-project-overview.md`** — High-level architecture, core flow, tech stack, demo scenarios.
+- **`argus-prem-guide.md`** — What Prem is building. Useful for understanding what the dashboard expects from my API.
 
 ## Tech Stack (My Parts)
 
-- **Frontend:** React 18 + Vite + TypeScript + TailwindCSS + shadcn/ui (New York style, Slate base, CSS variables)
-- **Routing:** react-router-dom
-- **HTTP Client:** axios
-- **Icons:** lucide-react
-- **Font:** Inter
-- **Agent Framework:** Google ADK (Python)
-- **Agent Model:** Gemini 2.5 Computer Use (`gemini-2.5-computer-use-preview-10-2025`)
-- **Agent Browser:** Playwright (via ADK ComputerUseToolset)
-
-## Branding & Design
-
-- **Theme:** Light mode with dark sidebar
-- **Primary accent:** Teal (#0D9488 / #14B8A6)
-- **Sidebar:** Dark slate (#1E293B)
-- **Background:** White (#FFFFFF) / Light gray (#F8FAFC)
-- **Approve:** Green (#22C55E)
-- **Deny:** Red (#EF4444)
-- **Pending:** Amber (#F59E0B)
-- **Font:** Inter
-- **Design philosophy:** Clean, minimal, professional fintech. Stripe Dashboard meets Linear. All components use shadcn/ui.
+- **API Framework:** FastAPI (Python 3.11+)
+- **Database:** SQLite + SQLAlchemy ORM
+- **Auth:** JWT (python-jose + bcrypt) for dashboard, static agent keys for agents
+- **AI Evaluation:** Google Gemini 2.0 Flash (google-generativeai SDK)
+- **Virtual Cards:** Mock card issuer (deterministic, no external dependency)
+- **Real-time:** FastAPI native WebSocket
+- **HTTP Client:** httpx (for plugin → API calls)
+- **Deployment:** Docker + Dockploy
 
 ## Project Structure
 
 ```
 argus/
-├── frontend/                   # [MY DOMAIN]
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── ui/             # shadcn/ui (auto-generated)
-│   │   │   ├── layout/         # AppLayout, AppSidebar (with ProfileSwitcher), Header
-│   │   │   ├── profiles/       # ProfileSwitcher
-│   │   │   ├── transactions/   # TransactionFeed, TransactionCard, StatusBadge
-│   │   │   ├── categories/     # CategoryList, CategoryCard, RuleTag
-│   │   │   ├── approvals/      # ApprovalQueue, ApprovalDialog
-│   │   │   └── auth/           # LoginForm
-│   │   ├── pages/              # LoginPage, DashboardPage, CategoriesPage, ApprovalsPage, ConnectionKeysPage, PaymentMethodsPage, TransactionDetailPage
-│   │   ├── hooks/              # useAuth, useProfile, useWebSocket, useTransactions
-│   │   ├── lib/                # api.ts, types.ts, utils.ts
-│   │   ├── App.tsx
-│   │   └── main.tsx
-│   ├── vite.config.ts
-│   ├── tailwind.config.ts
-│   └── package.json
-├── agent/
-│   ├── shopping_agent/         # [MY DOMAIN]
+├── backend/                    # [MY DOMAIN]
+│   ├── app/
 │   │   ├── __init__.py
-│   │   ├── agent.py
-│   │   ├── config.py
-│   │   └── prompts.py
-│   └── run_agent.py            # [MY DOMAIN]
-├── pitch/                      # [MY DOMAIN]
-├── argus-data-spec.md          # Source of truth for all contracts
-├── argus-prem-guide.md         # My build guide
-├── argus-project-overview.md   # High-level overview
-├── argus-teammate-guide.md     # Teammate's guide (for reference)
+│   │   ├── main.py             # FastAPI app, CORS, startup, WebSocket
+│   │   ├── config.py           # Pydantic Settings from env
+│   │   ├── database.py         # SQLAlchemy engine, session, Base
+│   │   ├── models/             # SQLAlchemy ORM models (10 tables)
+│   │   │   ├── __init__.py
+│   │   │   ├── user.py
+│   │   │   ├── profile.py
+│   │   │   ├── payment_method.py
+│   │   │   ├── spending_category.py
+│   │   │   ├── category_rule.py
+│   │   │   ├── connection_key.py
+│   │   │   ├── transaction.py
+│   │   │   ├── evaluation.py
+│   │   │   ├── human_approval.py
+│   │   │   └── virtual_card.py
+│   │   ├── schemas/            # Pydantic request/response schemas
+│   │   │   ├── __init__.py
+│   │   │   ├── auth.py
+│   │   │   ├── evaluate.py
+│   │   │   ├── transaction.py
+│   │   │   ├── category.py
+│   │   │   └── approval.py
+│   │   ├── routers/            # FastAPI route handlers
+│   │   │   ├── __init__.py
+│   │   │   ├── auth.py
+│   │   │   ├── evaluate.py
+│   │   │   ├── transactions.py
+│   │   │   ├── categories.py
+│   │   │   ├── approvals.py
+│   │   │   ├── agents.py
+│   │   │   ├── payment_methods.py
+│   │   │   └── health.py
+│   │   └── services/           # Business logic
+│   │       ├── __init__.py
+│   │       ├── gemini_evaluator.py
+│   │       ├── rules_engine.py
+│   │       ├── card_issuer.py
+│   │       └── websocket_manager.py
+│   ├── a2a/                    # A2A protocol
+│   │   ├── agent_card.py
+│   │   └── handler.py
+│   ├── seed.py                 # Database seeding
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── .env.example
+├── agent/
+│   └── argus_plugin/           # [MY DOMAIN]
+│       ├── __init__.py
+│       ├── plugin.py           # ArgusPlugin with before_tool_callback
+│       ├── request_purchase.py # Tool definition (intercepted by plugin)
+│       └── session_store.py
+├── argus-data-spec.md
+├── argus-teammate-guide.md
+├── argus-project-overview.md
+├── argus-prem-guide.md
 └── CLAUDE.md                   # This file
 ```
 
-## Build Order (Follow This Sequence)
+## Build Order (Follow This Sequence — Priority Order)
 
-### Hours 0-2: Foundation
-- Create Vite + React + Tailwind project in `frontend/`
-- Install shadcn/ui components
-- Set up React Router (login → protected routes)
-- Build AppLayout (sidebar + header + content slot)
-- Build AppSidebar with nav links
-- Create `lib/types.ts` with all TypeScript interfaces (copy from argus-data-spec.md Sections 3.4-3.16)
-- Create `lib/api.ts` with axios instance
-- Build LoginPage + LoginForm
+1. **Database models + seed** — Foundation everything depends on. 10 tables defined in argus-data-spec.md Section 2.
+2. **Auth endpoints** — `POST /auth/login` and `/auth/register` so Prem can start building dashboard auth.
+3. **POST /evaluate** — THE critical endpoint. Full 10-step pipeline in argus-teammate-guide.md Section 1.6 and argus-data-spec.md Section 3.4. Get this working even with a simplified rules engine first, then refine.
+4. **GET /transactions** — So Prem can display the transaction feed.
+5. **WebSocket** — `/ws/dashboard` so Prem can get real-time updates.
+6. **GET /categories** — Dashboard categories page.
+7. **Approve/deny endpoints** — `POST /transactions/{id}/approve` and `/deny`.
+8. **ADK Plugin** — `agent/argus_plugin/plugin.py` so Prem can test the full agent flow.
+9. **Other CRUD endpoints** — Agent keys, payment methods.
+10. **A2A endpoint** — Time-boxed to 3 hours. Agent Card + /a2a JSON-RPC handler.
+11. **Docker + deploy** — Dockerfile, docker-compose.yml, Dockploy setup.
+12. **README.md + ARCHITECTURE.md** — For Code Quality judging score.
 
-### Hours 2-4: Dashboard Core
-- Build useAuth hook
-- Build StatusBadge, TransactionCard, TransactionFeed
-- Build DashboardPage with WebSocket integration
-- Build useWebSocket hook
+## Database Tables (10 Total)
 
-### Hours 4-6: Agent + More Pages
-- Set up ADK shopping agent
-- Build CategoriesPage, CategoryCard, RuleTag
+All defined in argus-data-spec.md Section 2:
+- `users` — User accounts
+- `profiles` — Agent profiles (formerly `agents`), each with own categories/rules/keys
+- `payment_methods` — Funding sources with `method_type` + `detail` JSON
+- `spending_categories` — Per-profile: Footwear, Electronics, Travel, General
+- `category_rules` — Immutable rows (new row per change, for Hedera audit). Includes CUSTOM_RULE type for AI-evaluated free-text rules.
+- `connection_keys` — API keys connecting agents to profiles (prefix: `argus_ck_`, with optional `expires_at`)
+- `transactions` — Slim: request_data JSON + status + denormalized user_id
+- `evaluations` — AI categorization + rules engine results + decision + risk_flags (one per transaction)
+- `human_approvals` — Approval lifecycle with transaction_id + evaluation_id (only when HUMAN_NEEDED)
+- `virtual_cards` — Issued single-use scoped cards for approved purchases
 
-### Hours 6-8: Approvals + Integration
-- Build ApprovalQueue, ApprovalDialog, ApprovalsPage
-- Build TransactionDetailPage
-- Full end-to-end testing with teammate's backend
+Use UUID strings as primary keys: `id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))`
 
-### Hours 8-10: Polish + Agent Reliability
-- Loading skeletons, empty states, animations
-- Agent reliability testing
+## API Endpoints I Build
 
-### Hours 10-12: Demo + Video
-- Demo rehearsal, screen recording, video editing, Devpost submission
+All at `http://localhost:8000/api/v1`. Full request/response shapes in argus-data-spec.md Section 3.
 
-## API Endpoints I Consume
+**Auth (no auth required):**
+- `POST /auth/register` → creates user + default category + default rules
+- `POST /auth/login` → returns JWT token
 
-All endpoints are at `http://localhost:8000/api/v1` (backend runs on port 8000).
+**Agent endpoints (agent key auth):**
+- `POST /evaluate` — THE critical endpoint. Receives purchase request, runs Gemini + rules engine, returns decision + optional virtual card.
+- `GET /transactions/{id}/status` — Plugin polls this during human approval flow.
 
-**Auth:**
-- `POST /auth/login` → `{email, password}` → `{user, token}`
+**Dashboard endpoints (JWT auth):**
+- `GET /transactions` — List transactions (filterable, paginated)
+- `GET /transactions/{id}` — Full transaction detail
+- `POST /transactions/{id}/approve` — User approves pending transaction
+- `POST /transactions/{id}/deny` — User denies pending transaction
+- `GET /categories` — List categories with rules + spending totals
+- `POST /categories` — Create new category
+- `PUT /categories/{id}` — Edit category
+- `GET /agent-keys` — List agent keys (prefix only)
+- `POST /agent-keys` — Generate new key (returns full key ONCE)
+- `DELETE /agent-keys/{id}` — Revoke key
+- `GET /payment-methods` — List payment methods
+- `POST /payment-methods` — Add payment method
+- `WS /ws/dashboard` — Real-time transaction updates (JWT via query param)
+- `GET /health` — Health check
 
-**Profiles:**
-- `GET /profiles` → list user's profiles
-- `POST /profiles` → create new profile
+**Auth logic:** Check `Authorization: Bearer <token>` header. If token starts with `argus_ck_`, look up in connection_keys table → resolve profile_id → user_id. Otherwise, decode as JWT.
 
-**Transactions:**
-- `GET /transactions?limit=20&sort=created_at_desc` → transaction list (with joined evaluation data)
-- `POST /transactions/{id}/approve` → approve HUMAN_NEEDED transaction
-- `POST /transactions/{id}/deny` → deny HUMAN_NEEDED transaction
+## POST /evaluate Pipeline (The Most Important Thing I Build)
 
-**Categories (profile-scoped):**
-- `GET /categories?profile_id=X` → categories with rules + spending totals for selected profile
+10-step pipeline — full details in argus-data-spec.md Section 3.4 and argus-teammate-guide.md Section 1.6:
 
-**Connection Keys (profile-scoped):**
-- `GET /connection-keys?profile_id=X` → list keys for selected profile
-- `POST /connection-keys` → generate new key (returns full key ONCE)
-- `DELETE /connection-keys/{id}` → revoke key
+1. Validate agent key → resolve user_id
+2. Extract merchant domain from merchant_url
+3. Create transaction row (status: PENDING_EVALUATION)
+4. Load user's spending categories
+5. Call Gemini 2.0 Flash for categorization + risk assessment
+6. Match category from Gemini response
+7. Load rules for matched category
+8. Run deterministic rules engine (evaluate every rule, record results)
+9. Make decision: APPROVE / DENY / HUMAN_NEEDED
+10. Execute decision (issue card if approved, broadcast via WebSocket)
 
-**Payment Methods (account-level):**
-- `GET /payment-methods` → list all funding sources
-- `POST /payment-methods` → add new method (with method_type + detail JSON)
+## Rules Engine Decision Priority
 
-**WebSocket:**
-- `ws://localhost:8000/ws/dashboard?token=JWT` → real-time updates
+1. BLOCK_CATEGORY → DENY
+2. Hard-fail (MAX_PER_TRANSACTION, DAILY/WEEKLY/MONTHLY_LIMIT, MERCHANT_BLACKLIST) → DENY
+3. CUSTOM_RULE failed → HUMAN_NEEDED (AI-evaluated rules get human review)
+4. ALWAYS_REQUIRE_APPROVAL → HUMAN_NEEDED
+5. AUTO_APPROVE_UNDER failed (price above threshold) → HUMAN_NEEDED
+6. Gemini intent_match < 0.5 or critical risk_flags → HUMAN_NEEDED
+7. All rules pass → APPROVE
 
-Message types: `TRANSACTION_CREATED`, `TRANSACTION_DECIDED`, `APPROVAL_REQUIRED`, `VIRTUAL_CARD_USED`
+## Transaction Status Lifecycle
 
-**Transaction status values:** `PENDING_EVALUATION`, `AI_APPROVED`, `AI_DENIED`, `HUMAN_NEEDED`, `HUMAN_APPROVED`, `HUMAN_DENIED`, `HUMAN_TIMEOUT`, `COMPLETED`, `EXPIRED`, `FAILED`
+```
+PENDING_EVALUATION
+ ├── AI_APPROVED → COMPLETED / EXPIRED / FAILED
+ ├── AI_DENIED
+ └── HUMAN_NEEDED
+      ├── HUMAN_APPROVED → COMPLETED / EXPIRED / FAILED
+      ├── HUMAN_DENIED
+      └── HUMAN_TIMEOUT
+```
+
+## Seed Data
+
+Pre-populate on startup if demo user doesn't exist. Full data in argus-data-spec.md Section 10:
+- **Demo user:** demo@argus.dev / argus2026
+- **Payment methods:** Visa ending 4242 (default), Amex ending 1234
+- **Categories:** Footwear, Electronics, Travel, General (default) — each with specific rules
+- **Connection key:** `argus_ck_7f3b2c9e4d5a6b7c8d9e0f1a2b3c4d5e`
+
+## Integration Checkpoints with Prem
+
+- **Hour ~2:** Auth working. Prem can POST /login and get a JWT.
+- **Hour ~4:** GET /transactions returns data. WebSocket sends messages.
+- **Hour ~6:** POST /evaluate fully working. Plugin built. First end-to-end test.
+- **Hour ~8:** Approve/deny working. WebSocket broadcasts approvals.
+- **Hour ~10:** Everything deployed.
+
+## Environment Variables
+
+```bash
+ARGUS_DATABASE_URL=sqlite:///argus.db
+ARGUS_JWT_SECRET=argus-hackathon-secret-change-in-prod
+ARGUS_JWT_EXPIRY_HOURS=24
+GOOGLE_API_KEY=your-gemini-api-key
+GEMINI_EVAL_MODEL=gemini-2.0-flash
+USE_MOCK_CARDS=true
+ARGUS_CORS_ORIGINS=http://localhost:3000,http://localhost:5173
+```
 
 ## Important Notes
 
-- If backend isn't ready yet, mock data locally and build UI against the TypeScript types. Swap in real API calls later.
-- The DashboardPage (transaction feed) is the most important page — spend the most time here.
-- Use shadcn/ui for ALL components. No custom UI primitives.
-- Demo credentials: demo@argus.dev / argus2026
-- Frontend runs on port 5173 (Vite default) or 3000.
-- **Sidebar has a ProfileSwitcher** — categories, rules, and connection keys are all scoped to the selected profile. Payment methods are account-level (not profile-scoped).
-- **Status badges:** Green for `AI_APPROVED`/`HUMAN_APPROVED`, Red for `AI_DENIED`/`HUMAN_DENIED`, Amber for `HUMAN_NEEDED`, Blue for `PENDING_EVALUATION`, Gray for `HUMAN_TIMEOUT`/`EXPIRED`.
-- **The data spec (argus-data-spec.md) is the v2.0 source of truth.** Key changes from v1: profiles (not agents), connection_keys (not agent_keys, prefix `argus_ck_`), split transactions into transactions + evaluations + human_approvals tables, new status lifecycle, CUSTOM_RULE type, no spending_ledger.
+- Use mock card issuer, NOT Lithic sandbox. Simpler and no external dependency.
+- SQLite with `check_same_thread=False` for FastAPI async.
+- CORS must allow Prem's frontend origin (localhost:5173 for Vite dev server).
+- WebSocket auth: JWT token passed as query param `/ws/dashboard?token=eyJ...`
+- Gemini evaluation prompt is in argus-data-spec.md Section 9.1 — copy it exactly.
+- If Gemini fails, retry once then fall back to keyword-based categorization.
+- A2A is time-boxed to 3 hours. If not working cleanly, skip — mention in pitch only.
