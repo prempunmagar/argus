@@ -52,8 +52,8 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     # 3. Create default profile ("Personal Shopper")
     profile = Profile(
         user_id=user.id,
-        name="Personal Shopper",
-        description="My everyday shopping agent",
+        name="Defualt",
+        description="This is was created by defualt",
     )
     db.add(profile)
     db.flush()  # flush so profile.id is available for the FK below
