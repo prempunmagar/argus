@@ -31,7 +31,7 @@ def get_current_user(
 
     token = authorization[len("Bearer "):]
 
-    if token.startswith("argus_ak_"):
+    if token.startswith("argus_ck_"):
         # Connection key auth (agent)
         return _auth_connection_key(token, db)
     else:
@@ -51,14 +51,14 @@ def _auth_connection_key(key_value: str, db: Session) -> User:
     if not connection_key:
         raise HTTPException(
             status_code=401,
-            detail={"error": "INVALID_AGENT_KEY", "message": "Connection key is invalid or revoked"},
+            detail={"error": "INVALID_CONNECTION_KEY", "message": "Connection key is invalid or revoked"},
         )
 
     # Check optional expiry
-    if connection_key.expiry and connection_key.expiry < now:
+    if connection_key.expires_at and connection_key.expires_at < now:
         raise HTTPException(
             status_code=401,
-            detail={"error": "INVALID_AGENT_KEY", "message": "Connection key has expired"},
+            detail={"error": "INVALID_CONNECTION_KEY", "message": "Connection key has expired"},
         )
 
     # Resolve user through profile

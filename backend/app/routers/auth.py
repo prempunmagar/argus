@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.user import User
+from app.models.profile import Profile
 from app.models.spending_category import SpendingCategory
 from app.models.category_rule import CategoryRule
 from app.schemas.auth import (
@@ -24,7 +25,8 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
 
     Side effects:
       - Creates the User row
-      - Creates a default "General" spending category (is_default=True)
+      - Creates a default Profile ("Personal Shopper")
+      - Creates a default "General" spending category (is_default=True) under that profile
       - Creates 3 default category rules for that General category:
           MAX_PER_TRANSACTION = 500.00
           AUTO_APPROVE_UNDER  = 50.00
@@ -47,18 +49,26 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     db.add(user)
     db.flush()  # flush so user.id is available for the FK references below
 
-    # 3. Create default "General" spending category
-    general_category = SpendingCategory(
+    # 3. Create default profile ("Personal Shopper")
+    profile = Profile(
         user_id=user.id,
+        name="Personal Shopper",
+        description="My everyday shopping agent",
+    )
+    db.add(profile)
+    db.flush()  # flush so profile.id is available for the FK below
+
+    # 4. Create default "General" spending category under that profile
+    general_category = SpendingCategory(
+        profile_id=profile.id,
         name="General",
-        description="Default catch-all category",
+        description="Default for anything that doesn't fit other categories",
         is_default=True,
-        display_order=0,
     )
     db.add(general_category)
     db.flush()  # flush so general_category.id is available for rules
 
-    # 4. Create default rules for the General category
+    # 5. Create default rules for the General category
     default_rules = [
         CategoryRule(category_id=general_category.id, rule_type="MAX_PER_TRANSACTION", value="500.00"),
         CategoryRule(category_id=general_category.id, rule_type="AUTO_APPROVE_UNDER", value="50.00"),
@@ -68,7 +78,7 @@ def register(body: RegisterRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
 
-    # 5. Build response
+    # 6. Build response
     token = create_jwt(user.id, user.email)
     return AuthResponse(
         user=UserResponse(
