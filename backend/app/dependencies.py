@@ -18,7 +18,7 @@ def get_current_user(
     Unified auth dependency. Looks at the Authorization header and figures out
     whether this is a dashboard user (JWT) or an agent (connection key).
 
-    - If the token starts with "argus_ak_" → look it up in connection_keys table,
+    - If the token starts with "argus_ck_" → look it up in connection_keys table,
       then resolve profile → user
     - Otherwise → decode it as a JWT token
 
