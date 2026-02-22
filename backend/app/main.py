@@ -11,6 +11,7 @@ from app.routers import categories as categories_router
 from app.routers import profiles as profiles_router
 from app.routers import connection_keys as connection_keys_router
 from app.routers import payment_methods as payment_methods_router
+from a2a.handler import router as a2a_router
 from app.services.auth_service import decode_jwt
 from app.services.websocket_manager import ws_manager
 
@@ -55,6 +56,9 @@ app.include_router(payment_methods_router.router, prefix="/api/v1")
 
 # Health endpoint: GET /health (no /api/v1 prefix — standard practice)
 app.include_router(health.router)
+
+# A2A endpoints: GET /.well-known/agent.json, POST /a2a (no prefix — A2A spec requires root paths)
+app.include_router(a2a_router)
 
 
 # --- WebSocket: /ws/dashboard ---
