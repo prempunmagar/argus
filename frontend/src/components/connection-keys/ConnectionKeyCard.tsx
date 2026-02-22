@@ -37,9 +37,12 @@ export function ConnectionKeyCard({
             <code className="text-xs text-muted-foreground font-mono">
               {connectionKey.key_prefix}...
             </code>
+            <span className="text-xs text-muted-foreground">
+              Created {formatRelativeTime(connectionKey.created_at)}
+            </span>
             {connectionKey.last_used_at && (
               <span className="text-xs text-muted-foreground">
-                Last used {formatRelativeTime(connectionKey.last_used_at)}
+                · Last used {formatRelativeTime(connectionKey.last_used_at)}
               </span>
             )}
           </div>

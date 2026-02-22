@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Plus } from "lucide-react"
+import { Plus, KeyRound } from "lucide-react"
 import { toast } from "sonner"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
@@ -125,8 +125,22 @@ export function ConnectionKeysPage() {
           ))}
         </div>
       ) : keys.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <p className="text-sm">No connection keys yet. Generate one to get started.</p>
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
+            <KeyRound className="h-6 w-6 text-muted-foreground" />
+          </div>
+          <p className="text-sm font-medium">No connection keys yet</p>
+          <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+            Generate a connection key to let your AI shopping agent connect to Argus.
+          </p>
+          <Button
+            onClick={() => setDialogOpen(true)}
+            className="mt-4 bg-teal-600 hover:bg-teal-700 text-white gap-1.5"
+            size="sm"
+          >
+            <Plus className="h-4 w-4" />
+            Generate Key
+          </Button>
         </div>
       ) : (
         <div className="space-y-3">
