@@ -10,60 +10,8 @@ frontend/dist-ssr/
 .env.*
 !.env.example
 
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-pnpm-debug.log*
-
-# Editor / IDE
-.vscode/
-.idea/
-.cursor/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Python (for agent/)
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
-
-# Pitch folder
-pitch/
-
-# Local overrides
-*.local
-
-# Private guide / context MDs (only README.md + argus-data-spec.md tracked)
-CLAUDE.md
-CLAUDE-kes.md
-argus-kes-guide.md
-argus-prem-guide.md
-argus-project-overview.md
-argus_general_overview.md
-
-
-
-# Dependencies
-node_modules/
-
-# Build output
-frontend/dist/
-frontend/dist-ssr/
-
-# Environment variables
-.env
-.env.*
-!.env.example
+# SQLite database
+*.db
 
 # Logs
 *.log
