@@ -88,6 +88,31 @@ async def websocket_dashboard(
         ws_manager.disconnect(user_id, websocket)
 
 
+# --- Debug endpoint (TEMPORARY — remove after deploy testing) ---
+@app.get("/debug/env")
+def debug_env():
+    import os
+    api_key = settings.google_api_key
+    return {
+        "settings_resolved": {
+            "database_url": settings.database_url,
+            "cors_origins": settings.cors_origins,
+            "jwt_secret": settings.jwt_secret[:8] + "..." if settings.jwt_secret else "(empty)",
+            "google_api_key": f"{api_key[:8]}...{api_key[-4:]}" if len(api_key) > 12 else f"(empty or short: '{api_key}')",
+            "gemini_eval_model": settings.gemini_eval_model,
+            "use_mock_cards": settings.use_mock_cards,
+        },
+        "raw_env_vars": {
+            "ARGUS_DATABASE_URL": os.environ.get("ARGUS_DATABASE_URL", "(NOT SET)"),
+            "ARGUS_CORS_ORIGINS": os.environ.get("ARGUS_CORS_ORIGINS", "(NOT SET)"),
+            "ARGUS_JWT_SECRET": os.environ.get("ARGUS_JWT_SECRET", "(NOT SET)")[:8] + "..." if os.environ.get("ARGUS_JWT_SECRET") else "(NOT SET)",
+            "ARGUS_GOOGLE_API_KEY": f"{os.environ.get('ARGUS_GOOGLE_API_KEY', '')[:8]}..." if os.environ.get("ARGUS_GOOGLE_API_KEY") else "(NOT SET)",
+            "ARGUS_GEMINI_EVAL_MODEL": os.environ.get("ARGUS_GEMINI_EVAL_MODEL", "(NOT SET)"),
+            "ARGUS_USE_MOCK_CARDS": os.environ.get("ARGUS_USE_MOCK_CARDS", "(NOT SET)"),
+        },
+    }
+
+
 # --- Startup event ---
 # Creates all database tables on first run. SQLAlchemy checks if they exist
 # before creating, so this is safe to run every time.
