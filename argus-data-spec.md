@@ -357,6 +357,7 @@ PENDING_EVALUATION
 
 **Status values:** `PENDING_EVALUATION`, `AI_APPROVED`, `AI_DENIED`, `HUMAN_NEEDED`, `HUMAN_APPROVED`, `HUMAN_DENIED`, `HUMAN_TIMEOUT`, `COMPLETED`, `EXPIRED`, `FAILED`
 | `request_data`          | TEXT (JSON)   | NOT NULL                                 | Full purchase request (see structure below)           |
+| `hedera_tx_id`          | VARCHAR(100)  | NULLABLE                                 | Hedera TX ID for `TRANSACTION_CREATED` audit event   |
 | `created_at`            | TIMESTAMP     | NOT NULL, DEFAULT NOW                    |                                                      |
 | `updated_at`            | TIMESTAMP     | NOT NULL, DEFAULT NOW                    |                                                      |
 
@@ -402,6 +403,7 @@ The evaluation owns the FK to the transaction (not the other way around). To get
 | `risk_flags`             | TEXT (JSON)  | NULLABLE, DEFAULT '[]'                   | Free-text array of AI-generated risk descriptions    |
 | `rules_checked`          | TEXT (JSON)  | NULLABLE                                 | Array of rule check results (see structure below)    |
 | `decision`               | VARCHAR(20)  | NOT NULL                                 | `APPROVE`, `DENY`, `HUMAN_NEEDED`                    |
+| `hedera_tx_id`           | VARCHAR(100) | NULLABLE                                 | Hedera TX ID for `EVALUATION_DECIDED` audit event    |
 | `created_at`             | TIMESTAMP    | NOT NULL, DEFAULT NOW                    | When evaluation completed                            |
 
 **Index:** `idx_evaluations_transaction_id` on `transaction_id`
@@ -474,6 +476,7 @@ Has both `transaction_id` (to directly update transaction status without joining
 | `responded_at`           | TIMESTAMP    | NULLABLE                                 | When user clicked approve/deny (NULL if pending/timeout) |
 | `value`                  | VARCHAR(20)  | NULLABLE                                 | `APPROVE`, `DENY`, `TIMEOUT_DENY`                    |
 | `note`                   | TEXT         | NULLABLE                                 | Optional user note: "Too expensive, find cheaper"    |
+| `hedera_tx_id`           | VARCHAR(100) | NULLABLE                                 | Hedera TX ID for `HUMAN_APPROVAL_RESPONSE` audit event |
 
 **Index:** `idx_human_approvals_evaluation_id` on `evaluation_id`
 
@@ -697,7 +700,8 @@ This 2-join chain happens once at the top of `/evaluate`. The resolved `user_id`
     "spend_limit": 103.49,
     "merchant_lock": "amazon.com",
     "expires_at": "2026-02-20T15:30:00Z"
-  }
+  },
+  "hedera_tx_id": null
 }
 ```
 
@@ -730,7 +734,8 @@ This 2-join chain happens once at the top of `/evaluate`. The resolved `user_id`
     "risk_flags": [],
     "reasoning": "Product matches intent but budget constraint prevents approval."
   },
-  "virtual_card": null
+  "virtual_card": null,
+  "hedera_tx_id": null
 }
 ```
 
@@ -761,11 +766,8 @@ This 2-join chain happens once at the top of `/evaluate`. The resolved `user_id`
     "reasoning": "Reasonable match. Awaiting user confirmation."
   },
   "virtual_card": null,
-  "approval": {
-    "timeout_seconds": 300,
-    "poll_url": "/api/v1/transactions/txn_uuid/status",
-    "respond_url": "/api/v1/transactions/txn_uuid/respond"
-  }
+  "timeout_seconds": 300,
+  "hedera_tx_id": null
 }
 ```
 
@@ -840,7 +842,8 @@ or
 ```json
 {
   "transaction_id": "txn_uuid",
-  "status": "HUMAN_APPROVED",
+  "action": "APPROVE",
+  "reason": "Approved by user.",
   "virtual_card": {
     "card_number": "4532789012348847",
     "expiry_month": "03",
@@ -849,8 +852,10 @@ or
     "last_four": "8847",
     "spend_limit": 332.35,
     "merchant_lock": "marriott.com",
-    "expires_at": "2026-02-20T16:00:00Z"
-  }
+    "expires_at": "2026-02-20T16:00:00Z",
+    "status": "ACTIVE"
+  },
+  "hedera_tx_id": null
 }
 ```
 
@@ -858,8 +863,10 @@ or
 ```json
 {
   "transaction_id": "txn_uuid",
-  "status": "HUMAN_DENIED",
-  "reason": "Denied by user: Too expensive, find something cheaper"
+  "action": "DENY",
+  "reason": "Denied by user. Too expensive, find something cheaper",
+  "virtual_card": null,
+  "hedera_tx_id": null
 }
 ```
 
@@ -1718,21 +1725,18 @@ ARGUS_JWT_SECRET=your-jwt-secret-change-in-production
 ARGUS_JWT_EXPIRY_HOURS=24
 
 # === Gemini ===
-GOOGLE_API_KEY=your-gemini-api-key
-GEMINI_EVAL_MODEL=gemini-2.0-flash
-GEMINI_CU_MODEL=gemini-2.5-computer-use-preview-10-2025
+ARGUS_GOOGLE_API_KEY=your-gemini-api-key
+ARGUS_GEMINI_EVAL_MODEL=gemini-2.0-flash
 
 # === Cards ===
-USE_MOCK_CARDS=true
-LITHIC_API_KEY=your-lithic-sandbox-key
-LITHIC_ENVIRONMENT=sandbox
+ARGUS_USE_MOCK_CARDS=true
 
-# === Hedera (optional) ===
-HEDERA_ACCOUNT_ID=0.0.XXXXX
-HEDERA_PRIVATE_KEY=your-hedera-testnet-key
-HEDERA_TOPIC_ID=0.0.XXXXX
-HEDERA_NETWORK=testnet
-USE_HEDERA=false
+# === Hedera Audit Logging (optional — set ARGUS_USE_HEDERA=true to enable) ===
+ARGUS_USE_HEDERA=false
+ARGUS_HEDERA_ACCOUNT_ID=0.0.7974152
+ARGUS_HEDERA_PRIVATE_KEY=your-der-encoded-private-key
+ARGUS_HEDERA_TOPIC_ID=0.0.8008541
+ARGUS_HEDERA_NETWORK=testnet
 
 # === Agent ===
 ARGUS_API_URL=http://localhost:8000/api/v1

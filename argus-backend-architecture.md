@@ -92,7 +92,7 @@ backend/
 │   │   ├── auth_service.py      # register_user(), login_user(), create_jwt(), decode_jwt()
 │   │   ├── evaluate_service.py  # run_evaluate_pipeline() — orchestrates the whole /evaluate flow
 │   │   ├── gemini_evaluator.py  # extract_intent_and_category() (Call 1),
-│   │   │                        #   make_final_decision() (Call 2), keyword_fallback()
+│   │   │                        #   make_final_decision() (Call 2), _mock_call1_response()
 │   │   ├── rules_engine.py      # evaluate_rules()
 │   │   ├── spending_service.py  # get_spending_totals() — computes daily/weekly/monthly
 │   │   ├── card_issuer.py       # issue_mock_card()
@@ -220,6 +220,8 @@ def seed_demo_data(db: Session = None) -> None:
 6. `ConnectionKey` row (needs `profile_id`)
 
 **IDs are hardcoded** (e.g., `usr_demo_001`, `profile_demo_001`) so they're deterministic and both builders can reference them.
+
+**Note on request_data format:** Seed demo transactions use a flat v1 format `{product_name, price, merchant_name, merchant_url, ...}` stored directly in `request_data`. The live evaluate pipeline stores the full nested v2 request via `json.dumps(request.model_dump())` which has the shape `{"product": {...}, "chat_history": "..."}`. The transactions router parses both formats.
 
 ---
 
@@ -477,7 +479,7 @@ STEP 2 — Create Transaction row
   │                         })
   │    created_at         = now
   │    updated_at         = now
-  │  db.add(transaction); db.flush()    (flush, NOT commit — we need the ID)
+  │  db.add(transaction); db.commit()   (commit — Hedera fire-and-forget tasks need the row committed)
   │
   ▼
 STEP 3 — Broadcast TRANSACTION_CREATED via WebSocket
@@ -548,8 +550,8 @@ STEP 5 — Call Gemini: Extract Intent + Category
   │    }
   │  }
   │
-  │  If Gemini fails: retry once → then keyword_fallback() using
-  │  chat_history text matched against category descriptions.
+  │  If Gemini fails: retry once → then _mock_call1_response() which assigns
+  │  the default category at 0.90 confidence with a [MOCK] intent summary.
   │  (See Section 8 for full fallback logic)
   │
   ▼
@@ -883,7 +885,7 @@ async def run_evaluate_pipeline(
     Raises:
       HTTPException(500) if a critical unrecoverable error occurs.
       Does NOT raise on Gemini failure — falls back gracefully:
-        Call 1 fail → keyword fallback for category
+        Call 1 fail → _mock_call1_response() (default category, 0.90 confidence)
         Call 2 fail → conservative HUMAN_NEEDED decision
     """
 ```
@@ -1094,7 +1096,7 @@ The evaluator has **two distinct functions** for two distinct purposes. They use
 ```python
 async def extract_intent_and_category(
     chat_history: str,
-    categories: List[SpendingCategory]
+    categories: list
 ) -> dict:
     """
     GEMINI CALL 1: Extract user intent and determine category from
@@ -1111,7 +1113,7 @@ async def extract_intent_and_category(
 
     Retry strategy:
       - First call fails → retry once (same prompt)
-      - Second call fails → keyword_fallback() using chat_history
+      - Second call fails → _mock_call1_response() (default category, 0.90 confidence)
 
     Params:
       chat_history: Full conversation text (user + agent messages)
@@ -1288,37 +1290,24 @@ USER:
   }}
 ```
 
-### Fallback Function: `keyword_fallback()`
+### Fallback Function: `_mock_call1_response()`
 
 ```python
-def keyword_fallback(
-    categories: List[SpendingCategory],
-    chat_history: str
-) -> dict:
+def _mock_call1_response(categories: list) -> dict:
     """
-    Fallback when Gemini Call 1 fails (after 2 attempts).
+    Fallback when Gemini Call 1 fails (after 2 attempts) or when
+    GOOGLE_API_KEY is not set (local/test mode).
 
-    Extracts keywords from the chat history (focusing on user messages)
-    and matches against category descriptions using simple string matching.
-
-    Strategy:
-      1. Split chat_history into lines
-      2. Filter for lines starting with "User:" (trusted messages)
-      3. Tokenize into words
-      4. Match against category descriptions
-      5. Best match → use that category
-
-    If no match: use the default category (is_default=true).
+    Assigns the default category (is_default=True) at high confidence
+    with a generic [MOCK] intent summary — no keyword matching performed.
 
     Always returns:
-      intent.summary = "Intent extracted via keyword fallback (AI unavailable)"
-      category.confidence = 0.5 (keyword match) or 0.3 (default fallback)
-
-    Adds to risk_flags: "AI evaluation degraded — using keyword fallback"
+      category.confidence = 0.90
+      intent.summary = "[MOCK] Gemini unavailable. Intent not extracted."
 
     This ensures the pipeline NEVER fails completely. There's always
-    a category assignment. But confidence is low, so Gemini Call 2
-    (or the guardrails in step 11) will likely push to HUMAN_NEEDED.
+    a category assignment. The downstream guardrails in step 11 may
+    still force HUMAN_NEEDED if confidence or intent_match is low.
     """
 ```
 
@@ -1329,7 +1318,7 @@ CALL 1 — extract_intent_and_category():
   Gemini returns invalid JSON:
     → Try json.loads() in a try/except
     → If fails: try to extract JSON from markdown code block
-    → If still fails: treat as failure → retry → keyword_fallback()
+    → If still fails: treat as failure → retry → _mock_call1_response()
 
   Gemini returns valid JSON but missing keys:
     → Fill defaults: intent.summary = "unknown", category.name = default
@@ -1342,7 +1331,7 @@ CALL 1 — extract_intent_and_category():
 
   Gemini API key missing / quota exceeded / network error:
     → First attempt exception → retry once
-    → Second attempt same error → keyword_fallback()
+    → Second attempt same error → _mock_call1_response() (default category, 0.90 confidence)
 
 CALL 2 — make_final_decision():
   Gemini returns invalid JSON:
@@ -1399,8 +1388,8 @@ def issue_mock_card(
       merchant_domain: Domain the card is locked to
 
     Returns: dict with card_number, expiry_month, expiry_year, cvv,
-             last_four, spend_limit, merchant_lock, external_card_id,
-             expires_at, status
+             last_four, spend_limit, spend_limit_buffer, merchant_lock,
+             external_card_id, expires_at, expires_at_iso, issued_at, status
 
     Called by: evaluate_service (step 13, APPROVE branch)
               human approval service (when user approves)
@@ -1416,6 +1405,7 @@ After `issue_mock_card()` returns, the evaluate service creates a VirtualCard DB
 virtual_card = VirtualCard(
     id=str(uuid.uuid4()),
     transaction_id=transaction.id,
+    user_id=user_id,                       # denormalized for fast lookups
     payment_method_id=payment_method.id,   # the real funding source
     external_card_id=card_data["external_card_id"],
     card_number=card_data["card_number"],
@@ -1424,10 +1414,11 @@ virtual_card = VirtualCard(
     cvv=card_data["cvv"],
     last_four=card_data["last_four"],
     spend_limit=card_data["spend_limit"],
+    spend_limit_buffer=card_data["spend_limit_buffer"],
     merchant_lock=card_data["merchant_lock"],
     status="ACTIVE",
-    issued_at=datetime.utcnow(),
-    expires_at=datetime.fromisoformat(card_data["expires_at"].rstrip("Z")),
+    issued_at=card_data["issued_at"],
+    expires_at=card_data["expires_at"],
 )
 db.add(virtual_card)
 ```
@@ -1478,15 +1469,13 @@ IF payment_method is None:
 class WebSocketManager:
     """
     Manages active WebSocket connections.
-    One connection per user (user_id → WebSocket mapping).
-
-    If a user opens multiple dashboard tabs, only the LAST connection
-    is tracked. For hackathon this is fine. In production you'd want
-    a list of connections per user.
+    Supports multiple connections per user (e.g. multiple browser tabs).
+    Broadcasts to ALL active connections for a user (fan-out).
+    Dead connections are cleaned up automatically after a send failure.
     """
 
     def __init__(self):
-        self.connections: Dict[str, WebSocket] = {}
+        self.connections: Dict[str, List[WebSocket]] = {}
 
     async def connect(self, user_id: str, websocket: WebSocket) -> None:
         """
@@ -1595,7 +1584,7 @@ Router: transactions.py
   │     ├── Update Transaction: status = "HUMAN_APPROVED"
   │     ├── Broadcast WS: TRANSACTION_DECIDED
   │     │     {transaction_id, decision: "APPROVE", virtual_card_last_four}
-  │     └── Return: {transaction_id, status: "HUMAN_APPROVED", virtual_card: {...}}
+  │     └── Return: {transaction_id, action: "APPROVE", reason: "...", virtual_card: {...}}
   │
   └── action == "DENY"?
         │
@@ -1603,7 +1592,7 @@ Router: transactions.py
         ├── Update Transaction: status = "HUMAN_DENIED"
         ├── Broadcast WS: TRANSACTION_DECIDED
         │     {transaction_id, decision: "DENY", reason: "Denied by user: " + note}
-        └── Return: {transaction_id, status: "HUMAN_DENIED",
+        └── Return: {transaction_id, action: "DENY",
                      reason: "Denied by user" + (": " + note if note else "")}
   │
   ▼
@@ -1616,7 +1605,8 @@ Router: transactions.py
 ```json
 {
   "transaction_id": "txn_uuid",
-  "status": "HUMAN_APPROVED",
+  "action": "APPROVE",
+  "reason": "Transaction approved by user.",
   "virtual_card": {
     "card_number": "4532789012348847",
     "expiry_month": "03",
@@ -1626,7 +1616,8 @@ Router: transactions.py
     "spend_limit": 332.35,
     "merchant_lock": "marriott.com",
     "expires_at": "2026-02-20T16:00:00Z"
-  }
+  },
+  "hedera_tx_id": null
 }
 ```
 
@@ -1634,8 +1625,9 @@ Router: transactions.py
 ```json
 {
   "transaction_id": "txn_uuid",
-  "status": "HUMAN_DENIED",
-  "reason": "Denied by user: Too expensive, find something cheaper"
+  "action": "DENY",
+  "reason": "Denied by user: Too expensive, find something cheaper",
+  "hedera_tx_id": null
 }
 ```
 
@@ -1822,7 +1814,7 @@ async def create_payment_method(
       2. Create PaymentMethod row
       3. Return the new payment method
 
-    Note: method_type is one of: CARD, BANK_ACCOUNT, CRYPTO_WALLET
+    Note: method_type is one of: CREDIT_CARD, DEBIT_CARD, BANK_ACCOUNT, CRYPTO_WALLET
     The 'detail' field is a JSON object whose schema depends on method_type
     (see data-spec Section 2.3 for detail schemas).
     """
@@ -1900,9 +1892,9 @@ async def create_profile(request: ProfileCreateRequest, user: User, db: Session)
 │                         │                       │ If it does: 500  │
 ├─────────────────────────┼───────────────────────┼──────────────────┤
 │ Gemini Call 1           │ API timeout           │ Retry once       │
-│ (intent + category)     │ Rate limited          │ Then keyword     │
-│                         │ Invalid response      │ fallback (safe   │
-│                         │ Network error         │ but low conf).   │
+│ (intent + category)     │ Rate limited          │ Then mock resp   │
+│                         │ Invalid response      │ (default cat,    │
+│                         │ Network error         │ 0.90 conf).      │
 │                         │                       │ NEVER fail the   │
 │                         │                       │ pipeline here.   │
 ├─────────────────────────┼───────────────────────┼──────────────────┤
@@ -1930,7 +1922,7 @@ async def create_profile(request: ProfileCreateRequest, user: User, db: Session)
 └────────────────────────────────────────────────────────────────────┘
 
 KEY PRINCIPLE: The pipeline has two "safe failure" directions:
-  - Gemini Call 1 fails → keyword fallback (low confidence → likely HUMAN_NEEDED)
+  - Gemini Call 1 fails → _mock_call1_response() (default category, 0.90 conf — guardrails may push to HUMAN_NEEDED)
   - Gemini Call 2 fails → conservative HUMAN_NEEDED (never auto-approve blind)
   - Only hard denials (rules engine HARD_DENY) skip AI entirely — safe because
     they're denying, not approving.

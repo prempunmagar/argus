@@ -84,3 +84,4 @@ class EvaluateResponse(BaseModel):
     ai_evaluation: Optional[AIEvaluation] = None
     virtual_card: Optional[VirtualCardResponse] = None
     timeout_seconds: Optional[int] = None  # only when HUMAN_NEEDED
+    hedera_tx_id: Optional[str] = None     # Hedera TX for TRANSACTION_CREATED event

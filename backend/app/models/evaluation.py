@@ -19,6 +19,7 @@ class Evaluation(Base):
     risk_flags = Column(Text, nullable=True, default="[]")      # JSON array of free-text risk descriptions
     rules_checked = Column(Text, nullable=True)                 # JSON array of rule check results
     decision = Column(String(20), nullable=False)               # APPROVE, DENY, HUMAN_NEEDED
+    hedera_tx_id = Column(String(100), nullable=True)           # Hedera TX for EVALUATION_DECIDED event
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (

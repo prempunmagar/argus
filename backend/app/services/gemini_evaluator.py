@@ -150,7 +150,7 @@ def _mock_call2_response() -> dict:
 
 # ── Gemini Call 1: Extract Intent + Category ───────────────────────────────────
 
-def extract_intent_and_category(chat_history: str, categories: list) -> dict:
+async def extract_intent_and_category(chat_history: str, categories: list) -> dict:
     """
     GEMINI CALL 1: Extract user intent and determine category from chat history.
 
@@ -207,7 +207,7 @@ def extract_intent_and_category(chat_history: str, categories: list) -> dict:
 
 # ── Gemini Call 2: Make Final Decision ─────────────────────────────────────────
 
-def make_final_decision(report: dict, custom_rules: list = None) -> dict:
+async def make_final_decision(report: dict, custom_rules: list = None) -> dict:
     """
     GEMINI CALL 2: Given full report (intent + category + product + rules),
     cross-check everything and make a final decision.

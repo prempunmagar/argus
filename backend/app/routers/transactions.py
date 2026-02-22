@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -9,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user, get_connection_key_context, AgentContext
+from app.services import hedera_service
 from app.models.evaluation import Evaluation
 from app.models.human_approval import HumanApproval
 from app.models.payment_method import PaymentMethod
@@ -242,6 +244,7 @@ def get_transaction(
             decision_reasoning=evaluation.decision_reasoning,
             risk_flags=risk_flags,
             rules_checked=rules_checked,
+            hedera_tx_id=evaluation.hedera_tx_id,
             created_at=evaluation.created_at.isoformat(),
         )
 
@@ -253,6 +256,7 @@ def get_transaction(
         request_data=_parse_request_data(txn.request_data),
         evaluation=eval_detail,
         virtual_card=vc_detail,
+        hedera_tx_id=txn.hedera_tx_id,
         created_at=txn.created_at.isoformat(),
         updated_at=txn.updated_at.isoformat(),
     )
@@ -454,6 +458,26 @@ async def respond_to_transaction(
         virtual_card_detail = _build_virtual_card_detail(vc)
         reason = f"Approved by user. {body.note or ''}".strip()
 
+        # Fire HUMAN_APPROVAL_RESPONSE to Hedera (non-blocking, fire-and-forget)
+        _approval_ref = approval
+        _user_ref = current_user
+        async def _fire_human_approval_approve():
+            payload = {
+                "t":  _approval_ref.transaction_id,
+                "ha": _approval_ref.id,
+                "u":  _user_ref.id,
+                "ue": _user_ref.email,
+                "d":  _approval_ref.value,
+                "n":  str(_approval_ref.note or "")[:100],
+                "ra": _approval_ref.responded_at.isoformat(),
+            }
+            hedera_id = await hedera_service.submit_audit_message("HUMAN_APPROVAL_RESPONSE", payload)
+            if hedera_id and _approval_ref:
+                _approval_ref.hedera_tx_id = hedera_id
+                db.commit()
+
+        asyncio.create_task(_fire_human_approval_approve())
+
         # Broadcast TRANSACTION_DECIDED
         await ws_manager.send_to_user(current_user.id, {
             "type": "TRANSACTION_DECIDED",
@@ -477,6 +501,26 @@ async def respond_to_transaction(
 
         reason = f"Denied by user. {body.note or ''}".strip()
 
+        # Fire HUMAN_APPROVAL_RESPONSE to Hedera (non-blocking, fire-and-forget)
+        _approval_ref = approval
+        _user_ref = current_user
+        async def _fire_human_approval_deny():
+            payload = {
+                "t":  _approval_ref.transaction_id,
+                "ha": _approval_ref.id,
+                "u":  _user_ref.id,
+                "ue": _user_ref.email,
+                "d":  _approval_ref.value,
+                "n":  str(_approval_ref.note or "")[:100],
+                "ra": _approval_ref.responded_at.isoformat(),
+            }
+            hedera_id = await hedera_service.submit_audit_message("HUMAN_APPROVAL_RESPONSE", payload)
+            if hedera_id and _approval_ref:
+                _approval_ref.hedera_tx_id = hedera_id
+                db.commit()
+
+        asyncio.create_task(_fire_human_approval_deny())
+
         # Broadcast TRANSACTION_DECIDED
         await ws_manager.send_to_user(current_user.id, {
             "type": "TRANSACTION_DECIDED",
@@ -496,4 +540,5 @@ async def respond_to_transaction(
         action=body.action,
         reason=reason,
         virtual_card=virtual_card_detail,
+        hedera_tx_id=approval.hedera_tx_id if approval else None,
     )
