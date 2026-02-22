@@ -7,6 +7,13 @@ services:
       - "8000:8000"
     volumes:
       - argus-data:/data
+    environment:
+      - ARGUS_DATABASE_URL=sqlite:////data/argus.db
+      - ARGUS_CORS_ORIGINS=https://argus-principia.vercel.app,https://34-16-41-18.sslip.io
+      - ARGUS_JWT_SECRET=argus-hackathon-prod-secret-2026
+      - ARGUS_GEMINI_EVAL_MODEL=gemini-2.5-flash
+      - ARGUS_USE_MOCK_CARDS=true
+      - ARGUS_GOOGLE_API_KEY=${ARGUS_GOOGLE_API_KEY}
     restart: unless-stopped
 
 volumes:
