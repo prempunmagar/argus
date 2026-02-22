@@ -88,30 +88,6 @@ async def websocket_dashboard(
         ws_manager.disconnect(user_id, websocket)
 
 
-# --- Debug endpoint (TEMPORARY — remove after deploy testing) ---
-@app.get("/debug/env")
-def debug_env():
-    import os
-    api_key = settings.google_api_key
-    gemini_test = {"status": "skipped"}
-    if api_key:
-        try:
-            import google.generativeai as genai
-            genai.configure(api_key=api_key)
-            model = genai.GenerativeModel(model_name=settings.gemini_eval_model)
-            response = model.generate_content("Say hello in exactly 3 words.")
-            gemini_test = {"status": "ok", "response": response.text[:100]}
-        except Exception as e:
-            gemini_test = {"status": "error", "error": str(e), "type": type(e).__name__}
-    return {
-        "settings_resolved": {
-            "google_api_key": f"{api_key[:8]}...{api_key[-4:]}" if len(api_key) > 12 else f"(empty or short: '{api_key}')",
-            "gemini_eval_model": settings.gemini_eval_model,
-            "cors_origins": settings.cors_origins,
-        },
-        "gemini_test": gemini_test,
-    }
-
 
 # --- Startup event ---
 # Creates all database tables on first run. SQLAlchemy checks if they exist
