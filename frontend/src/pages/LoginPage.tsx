@@ -1,5 +1,4 @@
 import { useNavigate } from "react-router-dom"
-import { Shield } from "lucide-react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { LoginForm } from "@/components/auth/LoginForm"
 
@@ -10,9 +9,7 @@ export function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
       <Card className="w-full max-w-sm">
         <CardHeader className="items-center justify-items-center pb-2">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-teal-600 text-white">
-            <Shield className="h-5 w-5" />
-          </div>
+          <img src="/logo.png" alt="Argus" className="h-11 w-11 rounded-xl object-contain" />
           <div className="text-center">
             <h1 className="text-xl font-semibold tracking-tight">Argus</h1>
             <p className="text-xs text-muted-foreground mt-0.5">
