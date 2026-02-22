@@ -103,7 +103,7 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
                     category_name: msg.data.category_name,
                     decision_reasoning: msg.data.reason,
                   },
-                  virtual_card_last_four: msg.data.virtual_card_last_four,
+                  virtual_card_last_four: msg.data.virtual_card_last_four ?? undefined,
                 }
               : t
           )

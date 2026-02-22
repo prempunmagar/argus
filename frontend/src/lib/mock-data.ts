@@ -50,8 +50,8 @@ export const mockTransactions: Transaction[] = [
       decision_reasoning:
         "Price $349.99 would exceed your monthly Electronics limit. You've spent $1,800.00 this month against a $2,000.00 monthly limit.",
     },
-    virtual_card_last_four: null,
-    virtual_card_status: null,
+    virtual_card_last_four: undefined,
+    virtual_card_status: undefined,
     created_at: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
   },
   {
@@ -72,8 +72,8 @@ export const mockTransactions: Transaction[] = [
       intent_match: 0.85,
       decision_reasoning: "Travel purchases require your approval.",
     },
-    virtual_card_last_four: null,
-    virtual_card_status: null,
+    virtual_card_last_four: undefined,
+    virtual_card_status: undefined,
     created_at: new Date(Date.now() - 1000 * 60 * 2).toISOString(),
   },
   {
@@ -87,8 +87,8 @@ export const mockTransactions: Transaction[] = [
       merchant_domain: "amazon.com",
       merchant_url: "https://amazon.com/checkout",
     },
-    virtual_card_last_four: null,
-    virtual_card_status: null,
+    virtual_card_last_four: undefined,
+    virtual_card_status: undefined,
     created_at: new Date(Date.now() - 1000 * 10).toISOString(),
   },
   {
