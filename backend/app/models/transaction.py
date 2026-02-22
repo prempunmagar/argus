@@ -14,6 +14,7 @@ class Transaction(Base):
     connection_key_id = Column(String, ForeignKey("connection_keys.id"), nullable=False)
     status = Column(String(25), nullable=False, default="PENDING_EVALUATION")
     request_data = Column(Text, nullable=False)
+    hedera_tx_id = Column(String(100), nullable=True)   # Hedera TX for TRANSACTION_CREATED event
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 

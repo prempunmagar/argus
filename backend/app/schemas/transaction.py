@@ -36,6 +36,7 @@ class TransactionEvaluationDetail(BaseModel):
     decision_reasoning: Optional[str] = None
     risk_flags: List[str] = []
     rules_checked: List[Any] = []
+    hedera_tx_id: Optional[str] = None  # Hedera TX for EVALUATION_DECIDED event
     created_at: str
 
 
@@ -79,6 +80,7 @@ class TransactionDetail(BaseModel):
     request_data: TransactionRequestData
     evaluation: Optional[TransactionEvaluationDetail] = None
     virtual_card: Optional[VirtualCardDetail] = None
+    hedera_tx_id: Optional[str] = None  # Hedera TX for TRANSACTION_CREATED event
     created_at: str
     updated_at: str
 
@@ -107,3 +109,4 @@ class RespondResponse(BaseModel):
     action: str            # "APPROVE" or "DENY"
     reason: str
     virtual_card: Optional[VirtualCardDetail] = None
+    hedera_tx_id: Optional[str] = None  # Hedera TX for HUMAN_APPROVAL_RESPONSE event

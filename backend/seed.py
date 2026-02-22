@@ -87,7 +87,6 @@ def seed():
         cat_footwear = SpendingCategory(
             id="cat_footwear_001", profile_id="profile_demo_001",
             name="Footwear", description="Shoes, sneakers, boots, sandals, slippers",
-            keywords=json.dumps(["shoes", "sneakers", "boots", "running shoes", "sandals", "slippers"]),
             is_default=False,
         )
         db.add(cat_footwear)
@@ -102,7 +101,6 @@ def seed():
         cat_electronics = SpendingCategory(
             id="cat_electronics_001", profile_id="profile_demo_001",
             name="Electronics", description="Computers, phones, tablets, gadgets, peripherals",
-            keywords=json.dumps(["laptop", "phone", "headphones", "charger", "tablet", "computer", "monitor"]),
             is_default=False,
         )
         db.add(cat_electronics)
@@ -116,7 +114,6 @@ def seed():
         cat_travel = SpendingCategory(
             id="cat_travel_001", profile_id="profile_demo_001",
             name="Travel", description="Flights, hotels, car rentals, Airbnb, luggage",
-            keywords=json.dumps(["flight", "hotel", "airbnb", "booking", "rental car", "luggage", "travel"]),
             is_default=False,
         )
         db.add(cat_travel)
@@ -477,7 +474,6 @@ def seed():
         cat_refunds = SpendingCategory(
             id="cat_refunds_001", profile_id="profile_enterprise_001",
             name="Refunds", description="Customer refund processing — returns, damaged goods, wrong items",
-            keywords=json.dumps(["refund", "return", "damaged", "defective", "wrong item", "credit"]),
             is_default=False,
         )
         db.add(cat_refunds)
@@ -491,7 +487,6 @@ def seed():
         cat_cs = SpendingCategory(
             id="cat_cs_001", profile_id="profile_enterprise_001",
             name="Customer Service", description="General CS operations — goodwill credits, shipping adjustments, loyalty points",
-            keywords=json.dumps(["goodwill", "shipping credit", "loyalty", "courtesy", "adjustment", "compensation"]),
             is_default=True,
         )
         db.add(cat_cs)

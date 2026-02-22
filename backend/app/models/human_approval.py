@@ -16,6 +16,7 @@ class HumanApproval(Base):
     responded_at = Column(DateTime, nullable=True)              # When user clicked approve/deny (NULL if pending/timeout)
     value = Column(String(20), nullable=True)                   # APPROVE, DENY, TIMEOUT_DENY
     note = Column(Text, nullable=True)                          # Optional user note: "Too expensive, find cheaper"
+    hedera_tx_id = Column(String(100), nullable=True)           # Hedera TX for HUMAN_APPROVAL_RESPONSE event
 
     __table_args__ = (
         Index("idx_human_approvals_evaluation_id", "evaluation_id"),

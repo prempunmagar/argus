@@ -8,11 +8,13 @@ Phase 4: AI Final Decision        (steps 9-10 — Gemini Call 2, only if not HAR
 Phase 5: Execute Decision         (steps 11-14)
 """
 
+import asyncio
 import json
 import logging
 from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
+from app.services import hedera_service
 
 from app.models.category_rule import CategoryRule
 from app.models.evaluation import Evaluation
@@ -108,6 +110,24 @@ async def run_evaluate_pipeline(
     db.commit()
     db.refresh(transaction)
 
+    # Fire TRANSACTION_CREATED to Hedera (non-blocking, fire-and-forget)
+    async def _fire_transaction_created():
+        product_data = request.model_dump().get("product", {})
+        payload = {
+            "t":   transaction.id,
+            "u":   transaction.user_id,
+            "p":   str(product_data.get("product_name", ""))[:80],
+            "amt": product_data.get("price"),
+            "m":   merchant_domain,
+            "ts":  transaction.created_at.isoformat(),
+        }
+        hedera_id = await hedera_service.submit_audit_message("TRANSACTION_CREATED", payload)
+        if hedera_id:
+            transaction.hedera_tx_id = hedera_id
+            db.commit()
+
+    asyncio.create_task(_fire_transaction_created())
+
     # Broadcast TRANSACTION_CREATED
     await ws_manager.send_to_user(user_id, {
         "type": "TRANSACTION_CREATED",
@@ -140,7 +160,7 @@ async def run_evaluate_pipeline(
     # ── Phase 2: AI Intent Extraction (Gemini Call 1) ────────────────────────
 
     # Step 5: Extract intent + category (NO product details — security isolation)
-    call1_result = extract_intent_and_category(chat_history, categories_for_gemini)
+    call1_result = await extract_intent_and_category(chat_history, categories_for_gemini)
 
     # Step 6: Match category from Call 1 response
     category_name_from_gemini = call1_result.get("category", {}).get("name", "")
@@ -187,6 +207,7 @@ async def run_evaluate_pipeline(
     intent_match = None
     risk_flags = []
     custom_rule_results = []
+    call2_confidence = 1.0
 
     if outcome == "HARD_DENY":
         # Skip Call 2 — rules already determined DENY
@@ -210,13 +231,14 @@ async def run_evaluate_pipeline(
             "rules_results": checks,
         }
 
-        call2_result = make_final_decision(report, custom_rules_for_call2 or None)
+        call2_result = await make_final_decision(report, custom_rules_for_call2 or None)
 
         decision = call2_result.get("decision", "HUMAN_NEEDED")
         ai_reasoning = call2_result.get("reasoning")
         intent_match = call2_result.get("intent_match")
         risk_flags = call2_result.get("risk_flags", [])
         custom_rule_results = call2_result.get("custom_rule_results", [])
+        call2_confidence = call2_result.get("confidence", 0.0)
 
         # Update CUSTOM_RULE checks with Call 2 results
         for cr in custom_rule_results:
@@ -228,7 +250,23 @@ async def run_evaluate_pipeline(
 
     # ── Phase 5: Execute Decision ────────────────────────────────────────────
 
-    # Step 11: Create Evaluation row
+    # Step 11: Apply guardrails on Gemini's decision
+    if outcome != "HARD_DENY" and decision == "APPROVE":
+        # Guardrail 1: ALWAYS_REQUIRE_APPROVAL rule present — user explicitly set it
+        if any(c.get("rule_type") == "ALWAYS_REQUIRE_APPROVAL" for c in checks):
+            decision = "HUMAN_NEEDED"
+        # Guardrail 2: AUTO_APPROVE_UNDER threshold not met (price >= threshold)
+        if any(c.get("rule_type") == "AUTO_APPROVE_UNDER" and not c.get("passed", True) for c in checks):
+            decision = "HUMAN_NEEDED"
+        # Guardrail 3: AI not confident enough
+        if call2_confidence < 0.7:
+            decision = "HUMAN_NEEDED"
+        # Guardrail 4: Product doesn't match user intent
+        if intent_match is not None and intent_match < 0.5:
+            decision = "HUMAN_NEEDED"
+            risk_flags = list(risk_flags) + ["Low intent match — possible agent drift"]
+
+    # Step 12: Create Evaluation row
     evaluation = Evaluation(
         transaction_id=transaction.id,
         category_id=matched_category.id,
@@ -243,6 +281,27 @@ async def run_evaluate_pipeline(
     db.add(evaluation)
     db.commit()
     db.refresh(evaluation)
+
+    # Fire EVALUATION_DECIDED to Hedera (non-blocking, fire-and-forget)
+    async def _fire_evaluation_decided():
+        payload = {
+            "t":      evaluation.transaction_id,
+            "ev":     evaluation.id,
+            "d":      evaluation.decision,
+            "db":     "RULES" if outcome == "HARD_DENY" else "AI",
+            "c":      matched_category.name,
+            "conf":   evaluation.category_confidence,
+            "intent": str(evaluation.intent_summary or "")[:100],
+            "reason": str(evaluation.decision_reasoning or "")[:100],
+            "rules":  outcome,   # ALL_PASS / SOFT_FLAGS / HARD_DENY
+            "ts":     evaluation.created_at.isoformat(),
+        }
+        hedera_id = await hedera_service.submit_audit_message("EVALUATION_DECIDED", payload)
+        if hedera_id:
+            evaluation.hedera_tx_id = hedera_id
+            db.commit()
+
+    asyncio.create_task(_fire_evaluation_decided())
 
     reason = _build_reason(decision, checks, matched_category.name, ai_reasoning)
     virtual_card_response = None
@@ -390,4 +449,5 @@ async def run_evaluate_pipeline(
         ai_evaluation=ai_eval,
         virtual_card=virtual_card_response,
         timeout_seconds=timeout_seconds,
+        hedera_tx_id=transaction.hedera_tx_id,
     )

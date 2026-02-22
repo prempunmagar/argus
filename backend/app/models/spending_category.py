@@ -13,7 +13,6 @@ class SpendingCategory(Base):
     profile_id = Column(String, ForeignKey("profiles.id"), nullable=False)
     name = Column(String(100), nullable=False)              # "Footwear", "Electronics", "Travel"
     description = Column(Text, nullable=True)               # Helps Gemini categorize
-    keywords = Column(Text, nullable=True, default="[]")    # JSON array: ["shoes", "sneakers"]
     payment_method_id = Column(String, ForeignKey("payment_methods.id"), nullable=True)  # Preferred card for this category
     is_default = Column(Boolean, nullable=False, default=False)  # Fallback category — exactly one per profile
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))

@@ -20,6 +20,13 @@ class Settings(BaseSettings):
     # CORS
     cors_origins: str = "http://localhost:3000,http://localhost:5173"
 
+    # Hedera Audit Logging
+    use_hedera: bool = False
+    hedera_account_id: str = ""
+    hedera_private_key: str = ""
+    hedera_topic_id: str = ""
+    hedera_network: str = "testnet"
+
     class Config:
         env_file = ".env"
         env_prefix = "ARGUS_"
