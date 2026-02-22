@@ -9,7 +9,8 @@ def issue_mock_card(transaction_id: str, price: float, merchant_domain: str) -> 
     """
     seed = hashlib.sha256(transaction_id.encode()).hexdigest()
 
-    card_number = "4532" + seed[:12]          # Visa-like prefix
+    digits = "".join(str(int(c, 16) % 10) for c in seed[:12])
+    card_number = "4532" + digits              # Visa-like 16-digit number
     cvv = str(int(seed[:3], 16) % 900 + 100)  # 3-digit CVV (100-999)
     spend_limit = round(price * 1.15, 2)       # 15% buffer for tax/shipping
 
