@@ -1,0 +1,10 @@
+# Exclude from Docker build context (smaller image, no secrets/cache)
+__pycache__
+*.pyc
+*.pyo
+.env
+*.db
+.venv
+venv
+.env.local
+*.log
