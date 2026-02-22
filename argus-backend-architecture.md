@@ -826,7 +826,7 @@ STEP 13 — Execute decision
       db.commit()
         │
         ▼
-      Return EvaluateResponse with decision="HUMAN_NEEDED" + approval URLs + report
+      Return EvaluateResponse with decision="HUMAN_NEEDED" + respond URL + report
 ```
 
 ### The Orchestrator Function
@@ -878,7 +878,7 @@ async def run_evaluate_pipeline(
 
     Returns:
       EvaluateResponse with decision, reasoning, full report, rules_applied,
-      and optionally virtual_card (if approved) or approval URLs (if human_needed).
+      and optionally virtual_card (if approved) or respond URL (if human_needed).
 
     Raises:
       HTTPException(500) if a critical unrecoverable error occurs.
@@ -924,7 +924,7 @@ def get_spending_totals(
         "monthly": float   # Sum for current month (1st 00:00 UTC to now)
     }
 
-    Called by: evaluate_service (step 8 of the pipeline)
+    Called by: evaluate_service (step 7 of the pipeline)
     """
 ```
 
@@ -1402,7 +1402,7 @@ def issue_mock_card(
              last_four, spend_limit, merchant_lock, external_card_id,
              expires_at, status
 
-    Called by: evaluate_service (step 12, APPROVE branch)
+    Called by: evaluate_service (step 13, APPROVE branch)
               human approval service (when user approves)
     """
 ```
@@ -1464,8 +1464,8 @@ IF payment_method is None:
 │ EVENT                    │ TRIGGER LOCATION               │ MESSAGE TYPE          │
 ├──────────────────────────┼───────────────────────────────┼──────────────────────┤
 │ Transaction created      │ evaluate_service step 3       │ TRANSACTION_CREATED   │
-│ AI approved/denied       │ evaluate_service step 12      │ TRANSACTION_DECIDED   │
-│ Needs human approval     │ evaluate_service step 12      │ APPROVAL_REQUIRED     │
+│ AI approved/denied       │ evaluate_service step 13      │ TRANSACTION_DECIDED   │
+│ Needs human approval     │ evaluate_service step 13      │ APPROVAL_REQUIRED     │
 │ Human approved           │ transactions router (respond) │ TRANSACTION_DECIDED   │
 │ Human denied             │ transactions router (respond) │ TRANSACTION_DECIDED   │
 │ Virtual card used        │ (future: webhook from Lithic) │ VIRTUAL_CARD_USED     │
@@ -2080,14 +2080,14 @@ All valid state transitions and what triggers them:
 
 **Phase 4: Human approval flow**
 ```
-13. From step 10 (HUMAN_NEEDED): GET /transactions/{id}/status with agent key
+13. From step 10 (HUMAN_NEEDED): GET /transactions/{id}/status with connection key
     Expected: status=HUMAN_NEEDED, decision=null
 
 14. POST /transactions/{id}/respond with JWT:
     {"action": "APPROVE", "note": "Looks good"}
     Expected: status=HUMAN_APPROVED, virtual_card returned
 
-15. GET /transactions/{id}/status with agent key again
+15. GET /transactions/{id}/status with connection key again
     Expected: status=HUMAN_APPROVED, virtual_card included
 
 16. Repeat step 10 to get a new HUMAN_NEEDED transaction, then:
@@ -2123,7 +2123,7 @@ Quick smoke test that verifies:
 1. Login works
 2. Connection key auth works
 3. Evaluate returns correct decisions for known scenarios
-4. Approve/deny endpoints work
+4. Respond endpoint works (approve + deny via action field)
 5. Transaction list returns data
 
 Usage: python test_pipeline.py
@@ -2150,7 +2150,7 @@ Requires: server running on localhost:8000 with seed data
 | What happens when Gemini fails | Section 8: Error Scenarios |
 | How virtual cards are generated | Section 9: Card Issuer |
 | When WebSocket messages fire | Section 10: WebSocket |
-| What approve/deny do internally | Section 11: Human Approval |
+| What the respond endpoint does internally | Section 11: Human Approval |
 | How CRUD endpoints work | Section 12: Dashboard CRUD |
 | What to do when things break | Section 13: Error Handling |
 | Valid status transitions | Section 14: State Machine |
