@@ -1,5 +1,3 @@
-/md
-
 # Dependencies
 node_modules/
 
@@ -41,20 +39,14 @@ venv/
 
 # Pitch folder
 pitch/
-CLAUDE.md
+
 # Local overrides
 *.local
-argus-prem-guide.md
-.whodare/stats.json
-argus-prem-guide.md
-CLAUDE-kes.md
-CLAUDE.md
 
-ddfsf
+# Private guide / context MDs (only README.md + argus-data-spec.md tracked)
 CLAUDE.md
-CLAUDE.md
-MILESTONES.md
-argus-backend-architecture.md
-CLAUDE.md
-MILESTONES.md
-backend/test_v2.py
+CLAUDE-kes.md
+argus-kes-guide.md
+argus-prem-guide.md
+argus-project-overview.md
+argus_general_overview.md

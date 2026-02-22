@@ -38,6 +38,7 @@ export function CategoryCard({
   onEdit?: (category: SpendingCategory) => void
 }) {
   const dailyLimit = c.rules.find((r) => r.rule_type === "DAILY_LIMIT")
+  const weeklyLimit = c.rules.find((r) => r.rule_type === "WEEKLY_LIMIT")
   const monthlyLimit = c.rules.find((r) => r.rule_type === "MONTHLY_LIMIT")
 
   return (
@@ -56,7 +57,7 @@ export function CategoryCard({
             {c.payment_method && (
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <CreditCard className="h-3.5 w-3.5" />
-                <span>{c.payment_method.label}</span>
+                <span>{c.payment_method.nickname}</span>
               </div>
             )}
             {onEdit && (
@@ -72,20 +73,10 @@ export function CategoryCard({
           </div>
         </div>
         {c.description && (
-          <p className="text-xs text-muted-foreground mt-1">{c.description}</p>
+          <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{c.description}</p>
         )}
       </CardHeader>
       <CardContent className="space-y-4">
-        {c.keywords.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {c.keywords.map((kw) => (
-              <Badge key={kw} variant="secondary" className="text-[11px] font-normal">
-                {kw}
-              </Badge>
-            ))}
-          </div>
-        )}
-
         <div className="flex flex-wrap gap-1.5">
           {c.rules.map((rule) => (
             <RuleTag key={rule.id} rule={rule} />
@@ -98,6 +89,13 @@ export function CategoryCard({
               label="Today"
               spent={c.spending_today}
               limit={parseFloat(dailyLimit.value)}
+            />
+          )}
+          {weeklyLimit && (
+            <LimitBar
+              label="This week"
+              spent={c.spending_this_week}
+              limit={parseFloat(weeklyLimit.value)}
             />
           )}
           {monthlyLimit && (

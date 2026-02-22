@@ -1,62 +1,59 @@
-import { useEffect, useState, useCallback, type ChangeEvent } from "react"
-import { ShieldCheck, Clock, Store } from "lucide-react"
+import { useState, type ChangeEvent } from "react"
+import { useNavigate } from "react-router-dom"
+import { ShieldCheck, Store, ExternalLink } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { StatusBadge } from "@/components/transactions/StatusBadge"
 import { useTransactions } from "@/hooks/useTransactions"
-import { useWebSocket } from "@/hooks/useWebSocket"
 import { formatCurrency } from "@/lib/utils"
 import { api } from "@/lib/api"
 
+const USE_MOCK = !import.meta.env.VITE_API_URL
+
 export function ApprovalsPage() {
-  const { transactions, loading, fetchTransactions, handleWSMessage } =
-    useTransactions()
+  const navigate = useNavigate()
+  const { transactions, loading, updateTransaction } = useTransactions()
   const [notes, setNotes] = useState<Record<string, string>>({})
 
-  useWebSocket(handleWSMessage)
+  const pending = transactions.filter((t) => t.status === "HUMAN_NEEDED")
 
-  useEffect(() => {
-    fetchTransactions()
-  }, [fetchTransactions])
+  async function handleApprove(id: string) {
+    try {
+      await api.post(`/transactions/${id}/approve`, {
+        note: notes[id] || undefined,
+      })
+    } catch {
+      // mock mode
+    }
+    if (USE_MOCK) {
+      updateTransaction(id, { status: "HUMAN_APPROVED" })
+    }
+  }
 
-  const pending = transactions.filter((t) => t.status === "PENDING_APPROVAL")
-
-  const handleApprove = useCallback(
-    async (id: string) => {
-      try {
-        await api.post(`/transactions/${id}/approve`, {
-          note: notes[id] || undefined,
-        })
-        fetchTransactions()
-      } catch {
-        // mock mode
-      }
-    },
-    [notes, fetchTransactions]
-  )
-
-  const handleDeny = useCallback(
-    async (id: string) => {
-      try {
-        await api.post(`/transactions/${id}/deny`, {
-          note: notes[id] || undefined,
-        })
-        fetchTransactions()
-      } catch {
-        // mock mode
-      }
-    },
-    [notes, fetchTransactions]
-  )
+  async function handleDeny(id: string) {
+    try {
+      await api.post(`/transactions/${id}/deny`, {
+        note: notes[id] || undefined,
+      })
+    } catch {
+      // mock mode
+    }
+    if (USE_MOCK) {
+      updateTransaction(id, { status: "HUMAN_DENIED" })
+    }
+  }
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
       <div className="mb-6">
         <h1 className="text-xl font-semibold flex items-center gap-2">
-          <ShieldCheck className="h-5 w-5 text-amber-500" />
           Pending Approvals
+          {!loading && pending.length > 0 && (
+            <span className="text-sm font-normal text-muted-foreground">
+              ({pending.length})
+            </span>
+          )}
         </h1>
         <p className="text-sm text-muted-foreground">
           Review and approve or deny purchases that require your authorization
@@ -70,10 +67,14 @@ export function ApprovalsPage() {
           ))}
         </div>
       ) : pending.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-          <ShieldCheck className="h-10 w-10 mb-3 text-green-500" />
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
+            <ShieldCheck className="h-6 w-6 text-green-500" />
+          </div>
           <p className="text-sm font-medium">All clear</p>
-          <p className="text-xs mt-1">No pending approvals right now.</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            No pending approvals right now.
+          </p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -83,32 +84,35 @@ export function ApprovalsPage() {
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-medium">{t.product_name}</h3>
-                      <StatusBadge status={t.status} />
+                      <h3 className="font-medium">{t.request_data.product_name}</h3>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/transactions/${t.id}`)}
+                        className="text-teal-600 hover:text-teal-700"
+                        title="View details"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground mt-1">
                       <span className="flex items-center gap-1">
                         <Store className="h-3.5 w-3.5" />
-                        {t.merchant_name}
+                        {t.request_data.merchant_name}
                       </span>
-                      {t.detected_category_name && (
+                      {t.evaluation?.category_name && (
                         <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium">
-                          {t.detected_category_name}
+                          {t.evaluation.category_name}
                         </span>
                       )}
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3.5 w-3.5" />
-                        Waiting for your decision
-                      </span>
                     </div>
-                    {t.decision_reason && (
-                      <p className="mt-2 text-sm text-muted-foreground">
-                        {t.decision_reason}
+                    {t.evaluation?.decision_reasoning && (
+                      <p className="mt-2 text-sm text-amber-700">
+                        {t.evaluation.decision_reasoning}
                       </p>
                     )}
                   </div>
                   <p className="text-lg font-semibold shrink-0">
-                    {formatCurrency(t.price, t.currency)}
+                    {formatCurrency(t.request_data.price, t.request_data.currency)}
                   </p>
                 </div>
 

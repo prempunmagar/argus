@@ -50,11 +50,42 @@ export function useAuth() {
     }
   }, [])
 
+  const register = useCallback(async (name: string, email: string, password: string) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const { data } = await api.post<AuthResponse>("/auth/register", { name, email, password })
+      localStorage.setItem("argus_token", data.token)
+      localStorage.setItem("argus_user", JSON.stringify(data.user))
+      setUser(data.user)
+      return true
+    } catch (err: any) {
+      // Mock register fallback when backend isn't running
+      if (!import.meta.env.VITE_API_URL) {
+        const mockUser: User = {
+          id: `usr_${Date.now()}`,
+          email,
+          name,
+          created_at: new Date().toISOString(),
+        }
+        localStorage.setItem("argus_token", "mock_jwt_token")
+        localStorage.setItem("argus_user", JSON.stringify(mockUser))
+        setUser(mockUser)
+        return true
+      }
+      const msg = err?.response?.data?.message
+      setError(msg || "Failed to create account")
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   const logout = useCallback(() => {
     localStorage.removeItem("argus_token")
     localStorage.removeItem("argus_user")
     setUser(null)
   }, [])
 
-  return { user, isAuthenticated, loading, error, login, logout }
+  return { user, isAuthenticated, loading, error, login, register, logout }
 }

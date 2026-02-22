@@ -1,5 +1,5 @@
-import { useState, useEffect, type KeyboardEvent, type ChangeEvent } from "react"
-import { Plus, Trash2, X } from "lucide-react"
+import { useState, useEffect, type ChangeEvent } from "react"
+import { Plus, Trash2 } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -11,7 +11,6 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -20,7 +19,6 @@ import type { SpendingCategory, RuleType, PaymentMethod } from "@/lib/types"
 export interface CategoryFormData {
   name: string
   description: string
-  keywords: string[]
   rules: { rule_type: RuleType; value: string }[]
   payment_method_id: string
 }
@@ -33,7 +31,8 @@ interface Props {
   paymentMethods?: PaymentMethod[]
 }
 
-const RULE_LABELS: Record<RuleType, string> = {
+// Deterministic rule types shown in the "Spending Rules" section
+const DETERMINISTIC_RULE_LABELS: Record<string, string> = {
   MAX_PER_TRANSACTION: "Max per transaction",
   DAILY_LIMIT: "Daily limit",
   WEEKLY_LIMIT: "Weekly limit",
@@ -58,7 +57,7 @@ const BOOLEAN_RULES: RuleType[] = [
   "BLOCK_CATEGORY",
 ]
 
-const ALL_RULE_TYPES = Object.keys(RULE_LABELS) as RuleType[]
+const DETERMINISTIC_RULE_TYPES = Object.keys(DETERMINISTIC_RULE_LABELS) as RuleType[]
 
 function merchantListToString(value: string): string {
   try {
@@ -82,9 +81,8 @@ export function CategoryFormDialog({ open, onOpenChange, category, onSave, payme
 
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
-  const [keywords, setKeywords] = useState<string[]>([])
-  const [keywordInput, setKeywordInput] = useState("")
   const [rules, setRules] = useState<{ rule_type: RuleType; value: string }[]>([])
+  const [customRule, setCustomRule] = useState("")
   const [paymentMethodId, setPaymentMethodId] = useState("")
   const [saving, setSaving] = useState(false)
 
@@ -92,37 +90,18 @@ export function CategoryFormDialog({ open, onOpenChange, category, onSave, payme
     if (open) {
       setName(category?.name ?? "")
       setDescription(category?.description ?? "")
-      setKeywords(category?.keywords ?? [])
-      setKeywordInput("")
-      setRules(
-        category?.rules.map((r) => ({ rule_type: r.rule_type, value: r.value })) ?? []
-      )
+      // Separate deterministic rules from custom rule
+      const allRules = category?.rules.map((r) => ({ rule_type: r.rule_type, value: r.value })) ?? []
+      setRules(allRules.filter((r) => r.rule_type !== "CUSTOM_RULE"))
+      const existing = allRules.find((r) => r.rule_type === "CUSTOM_RULE")
+      setCustomRule(existing?.value ?? "")
       setPaymentMethodId(category?.payment_method?.id ?? "")
       setSaving(false)
     }
   }, [open, category])
 
   const usedRuleTypes = new Set(rules.map((r) => r.rule_type))
-  const availableRuleTypes = ALL_RULE_TYPES.filter((rt) => !usedRuleTypes.has(rt))
-
-  function addKeyword() {
-    const kw = keywordInput.trim().toLowerCase()
-    if (kw && !keywords.includes(kw)) {
-      setKeywords((prev) => [...prev, kw])
-    }
-    setKeywordInput("")
-  }
-
-  function removeKeyword(kw: string) {
-    setKeywords((prev) => prev.filter((k) => k !== kw))
-  }
-
-  function handleKeywordKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
-      e.preventDefault()
-      addKeyword()
-    }
-  }
+  const availableRuleTypes = DETERMINISTIC_RULE_TYPES.filter((rt) => !usedRuleTypes.has(rt))
 
   function addRule() {
     if (availableRuleTypes.length === 0) return
@@ -155,7 +134,6 @@ export function CategoryFormDialog({ open, onOpenChange, category, onSave, payme
 
     const finalRules = rules.map((r) => {
       if (r.rule_type === "MERCHANT_WHITELIST" || r.rule_type === "MERCHANT_BLACKLIST") {
-        // If not already JSON, convert comma-separated to JSON
         if (!r.value.startsWith("[")) {
           return { ...r, value: stringToMerchantList(r.value) }
         }
@@ -163,10 +141,14 @@ export function CategoryFormDialog({ open, onOpenChange, category, onSave, payme
       return r
     })
 
+    // Append custom rule if user wrote one
+    if (customRule.trim()) {
+      finalRules.push({ rule_type: "CUSTOM_RULE" as RuleType, value: customRule.trim() })
+    }
+
     onSave({
       name: name.trim(),
       description: description.trim(),
-      keywords,
       rules: finalRules,
       payment_method_id: paymentMethodId,
     })
@@ -231,7 +213,7 @@ export function CategoryFormDialog({ open, onOpenChange, category, onSave, payme
                   <option value="">None (use default)</option>
                   {paymentMethods.map((pm) => (
                     <option key={pm.id} value={pm.id}>
-                      {pm.label}
+                      {pm.nickname}
                     </option>
                   ))}
                 </select>
@@ -240,63 +222,14 @@ export function CategoryFormDialog({ open, onOpenChange, category, onSave, payme
 
             <Separator />
 
-            {/* Keywords */}
-            <div className="space-y-2">
-              <Label>Keywords</Label>
-              <p className="text-xs text-muted-foreground">
-                Keywords help match purchases to this category.
-              </p>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Type a keyword and press Enter"
-                  value={keywordInput}
-                  onChange={(e: ChangeEvent<HTMLInputElement>) =>
-                    setKeywordInput(e.target.value)
-                  }
-                  onKeyDown={handleKeywordKeyDown}
-                  className="flex-1"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addKeyword}
-                  className="shrink-0"
-                >
-                  Add
-                </Button>
-              </div>
-              {keywords.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {keywords.map((kw) => (
-                    <Badge
-                      key={kw}
-                      variant="secondary"
-                      className="text-xs gap-1 pr-1"
-                    >
-                      {kw}
-                      <button
-                        type="button"
-                        onClick={() => removeKeyword(kw)}
-                        className="ml-0.5 rounded-full hover:bg-foreground/10 p-0.5"
-                      >
-                        <X className="h-3 w-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <Separator />
-
-            {/* Rules */}
+            {/* Spending Rules (deterministic only) */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div>
                   <Label>Spending Rules</Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Define limits and behaviors for this category.
+                    Define hard limits and behaviors. These are checked deterministically
+                    before AI evaluation.
                   </p>
                 </div>
                 <Button
@@ -330,6 +263,25 @@ export function CategoryFormDialog({ open, onOpenChange, category, onSave, payme
                   />
                 ))}
               </div>
+            </div>
+
+            <Separator />
+
+            {/* Custom AI Rule (separate from deterministic rules) */}
+            <div className="space-y-2">
+              <Label htmlFor="cat-custom-rule">Custom AI Rule</Label>
+              <p className="text-xs text-muted-foreground">
+                Custom rule to evaluate. Leave blank if not needed.
+              </p>
+              <Textarea
+                id="cat-custom-rule"
+                rows={3}
+                placeholder="e.g., Only approve if the product has 4+ star reviews and is from a US-based seller. Reject subscription-based products or recurring payments."
+                value={customRule}
+                onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
+                  setCustomRule(e.target.value)
+                }
+              />
             </div>
           </div>
         </ScrollArea>
@@ -381,13 +333,13 @@ function RuleRow({
         onChange={(e) => onChange("rule_type", e.target.value)}
         className="h-9 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-w-[160px]"
       >
-        {ALL_RULE_TYPES.map((rt) => (
+        {DETERMINISTIC_RULE_TYPES.map((rt) => (
           <option
             key={rt}
             value={rt}
             disabled={usedTypes.has(rt) && rt !== rule.rule_type}
           >
-            {RULE_LABELS[rt]}
+            {DETERMINISTIC_RULE_LABELS[rt]}
           </option>
         ))}
       </select>
@@ -419,13 +371,9 @@ function RuleRow({
                 : ""
           }
           value={displayValue}
-          onChange={(e: ChangeEvent<HTMLInputElement>) => {
-            if (isMerchantList) {
-              onChange("value", e.target.value)
-            } else {
-              onChange("value", e.target.value)
-            }
-          }}
+          onChange={(e: ChangeEvent<HTMLInputElement>) =>
+            onChange("value", e.target.value)
+          }
           className="flex-1"
         />
       )}

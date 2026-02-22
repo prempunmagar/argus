@@ -1,5 +1,5 @@
 import { useState, useEffect, type ChangeEvent } from "react"
-import { Plus } from "lucide-react"
+import { Plus, CreditCard } from "lucide-react"
 import { toast } from "sonner"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -102,7 +102,13 @@ export function ProfilePage() {
           setMethods((prev) =>
             prev.map((m) => {
               if (m.id === editingMethod.id) {
-                return { ...m, ...data }
+                return {
+                  ...m,
+                  nickname: data.nickname,
+                  method_type: data.method_type,
+                  detail: data.detail,
+                  is_default: data.is_default,
+                }
               }
               if (data.is_default && m.is_default) {
                 return { ...m, is_default: false }
@@ -114,8 +120,11 @@ export function ProfilePage() {
         } else {
           const newMethod: PaymentMethod = {
             id: `pm-${Date.now()}`,
-            ...data,
-            is_active: true,
+            nickname: data.nickname,
+            method_type: data.method_type,
+            detail: data.detail,
+            is_default: data.is_default,
+            status: "active",
           }
           if (data.is_default) {
             setMethods((prev) => [
@@ -146,6 +155,19 @@ export function ProfilePage() {
       setPmDialogOpen(false)
     } catch {
       toast.error("Failed to save payment method")
+    }
+  }
+
+  async function handleDeletePm(id: string) {
+    try {
+      if (!USE_MOCK) {
+        await api.delete(`/payment-methods/${id}`)
+      }
+      setMethods((prev) => prev.filter((m) => m.id !== id))
+      setPmDialogOpen(false)
+      toast.success("Payment method removed")
+    } catch {
+      toast.error("Failed to remove payment method")
     }
   }
 
@@ -203,31 +225,45 @@ export function ProfilePage() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Payment Methods</CardTitle>
-              <Button
-                onClick={openCreatePm}
-                size="sm"
-                className="bg-teal-600 hover:bg-teal-700 text-white gap-1.5"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Add Method
-              </Button>
+              {methods.length > 0 && (
+                <Button
+                  onClick={openCreatePm}
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add
+                </Button>
+              )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              Cards, bank accounts, and wallets used for AI agent purchases
-            </p>
           </CardHeader>
           <CardContent>
             {methodsLoading ? (
-              <div className="space-y-3">
-                <Skeleton className="h-16 rounded-lg" />
-                <Skeleton className="h-16 rounded-lg" />
+              <div className="space-y-2">
+                <Skeleton className="h-14 rounded-lg" />
+                <Skeleton className="h-14 rounded-lg" />
               </div>
             ) : methods.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-2">
-                No payment methods yet. Add one to get started.
-              </p>
+              <div className="flex flex-col items-center py-6 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
+                  <CreditCard className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <p className="text-sm font-medium">No payment methods</p>
+                <p className="text-xs text-muted-foreground mt-1 mb-4">
+                  Add a card or bank account to fund AI agent purchases.
+                </p>
+                <Button
+                  onClick={openCreatePm}
+                  size="sm"
+                  className="bg-teal-600 hover:bg-teal-700 text-white gap-1.5"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Payment Method
+                </Button>
+              </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {methods.map((m) => (
                   <PaymentMethodCard key={m.id} method={m} onEdit={openEditPm} />
                 ))}
@@ -296,6 +332,7 @@ export function ProfilePage() {
         onOpenChange={setPmDialogOpen}
         method={editingMethod}
         onSave={handleSavePm}
+        onDelete={handleDeletePm}
       />
     </div>
   )
