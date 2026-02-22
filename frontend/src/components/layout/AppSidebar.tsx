@@ -6,7 +6,6 @@ import {
   KeyRound,
   UserCircle,
   LogOut,
-  Shield,
 } from "lucide-react"
 import {
   Sidebar,
@@ -49,9 +48,7 @@ export function AppSidebar() {
           className="flex items-center gap-2 cursor-pointer"
           onClick={() => navigate("/")}
         >
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-600 text-white">
-            <Shield className="h-4 w-4" />
-          </div>
+          <img src="/logo.png" alt="Argus" className="h-8 w-8 rounded-lg object-contain" />
           <div>
             <h1 className="text-base font-semibold text-sidebar-foreground">
               Argus
