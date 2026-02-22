@@ -31,7 +31,8 @@ interface Props {
   paymentMethods?: PaymentMethod[]
 }
 
-const RULE_LABELS: Record<RuleType, string> = {
+// Deterministic rule types shown in the "Spending Rules" section
+const DETERMINISTIC_RULE_LABELS: Record<string, string> = {
   MAX_PER_TRANSACTION: "Max per transaction",
   DAILY_LIMIT: "Daily limit",
   WEEKLY_LIMIT: "Weekly limit",
@@ -41,7 +42,6 @@ const RULE_LABELS: Record<RuleType, string> = {
   MERCHANT_BLACKLIST: "Merchant blacklist",
   ALWAYS_REQUIRE_APPROVAL: "Always require approval",
   BLOCK_CATEGORY: "Block category",
-  CUSTOM_RULE: "Custom rule",
 }
 
 const MONETARY_RULES: RuleType[] = [
@@ -57,7 +57,7 @@ const BOOLEAN_RULES: RuleType[] = [
   "BLOCK_CATEGORY",
 ]
 
-const ALL_RULE_TYPES = Object.keys(RULE_LABELS) as RuleType[]
+const DETERMINISTIC_RULE_TYPES = Object.keys(DETERMINISTIC_RULE_LABELS) as RuleType[]
 
 function merchantListToString(value: string): string {
   try {
@@ -82,6 +82,7 @@ export function CategoryFormDialog({ open, onOpenChange, category, onSave, payme
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
   const [rules, setRules] = useState<{ rule_type: RuleType; value: string }[]>([])
+  const [customRule, setCustomRule] = useState("")
   const [paymentMethodId, setPaymentMethodId] = useState("")
   const [saving, setSaving] = useState(false)
 
@@ -89,16 +90,18 @@ export function CategoryFormDialog({ open, onOpenChange, category, onSave, payme
     if (open) {
       setName(category?.name ?? "")
       setDescription(category?.description ?? "")
-      setRules(
-        category?.rules.map((r) => ({ rule_type: r.rule_type, value: r.value })) ?? []
-      )
+      // Separate deterministic rules from custom rule
+      const allRules = category?.rules.map((r) => ({ rule_type: r.rule_type, value: r.value })) ?? []
+      setRules(allRules.filter((r) => r.rule_type !== "CUSTOM_RULE"))
+      const existing = allRules.find((r) => r.rule_type === "CUSTOM_RULE")
+      setCustomRule(existing?.value ?? "")
       setPaymentMethodId(category?.payment_method?.id ?? "")
       setSaving(false)
     }
   }, [open, category])
 
   const usedRuleTypes = new Set(rules.map((r) => r.rule_type))
-  const availableRuleTypes = ALL_RULE_TYPES.filter((rt) => !usedRuleTypes.has(rt))
+  const availableRuleTypes = DETERMINISTIC_RULE_TYPES.filter((rt) => !usedRuleTypes.has(rt))
 
   function addRule() {
     if (availableRuleTypes.length === 0) return
@@ -131,13 +134,17 @@ export function CategoryFormDialog({ open, onOpenChange, category, onSave, payme
 
     const finalRules = rules.map((r) => {
       if (r.rule_type === "MERCHANT_WHITELIST" || r.rule_type === "MERCHANT_BLACKLIST") {
-        // If not already JSON, convert comma-separated to JSON
         if (!r.value.startsWith("[")) {
           return { ...r, value: stringToMerchantList(r.value) }
         }
       }
       return r
     })
+
+    // Append custom rule if user wrote one
+    if (customRule.trim()) {
+      finalRules.push({ rule_type: "CUSTOM_RULE" as RuleType, value: customRule.trim() })
+    }
 
     onSave({
       name: name.trim(),
@@ -215,13 +222,14 @@ export function CategoryFormDialog({ open, onOpenChange, category, onSave, payme
 
             <Separator />
 
-            {/* Rules */}
+            {/* Spending Rules (deterministic only) */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div>
                   <Label>Spending Rules</Label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Define limits and behaviors for this category.
+                    Define hard limits and behaviors. These are checked deterministically
+                    before AI evaluation.
                   </p>
                 </div>
                 <Button
@@ -255,6 +263,25 @@ export function CategoryFormDialog({ open, onOpenChange, category, onSave, payme
                   />
                 ))}
               </div>
+            </div>
+
+            <Separator />
+
+            {/* Custom AI Rule (separate from deterministic rules) */}
+            <div className="space-y-2">
+              <Label htmlFor="cat-custom-rule">Custom AI Rule</Label>
+              <p className="text-xs text-muted-foreground">
+                Custom rule to evaluate. Leave blank if not needed.
+              </p>
+              <Textarea
+                id="cat-custom-rule"
+                rows={3}
+                placeholder="e.g., Only approve if the product has 4+ star reviews and is from a US-based seller. Reject subscription-based products or recurring payments."
+                value={customRule}
+                onChange={(e: ChangeEvent<HTMLTextAreaElement>) =>
+                  setCustomRule(e.target.value)
+                }
+              />
             </div>
           </div>
         </ScrollArea>
@@ -306,13 +333,13 @@ function RuleRow({
         onChange={(e) => onChange("rule_type", e.target.value)}
         className="h-9 rounded-md border border-input bg-transparent px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring min-w-[160px]"
       >
-        {ALL_RULE_TYPES.map((rt) => (
+        {DETERMINISTIC_RULE_TYPES.map((rt) => (
           <option
             key={rt}
             value={rt}
             disabled={usedTypes.has(rt) && rt !== rule.rule_type}
           >
-            {RULE_LABELS[rt]}
+            {DETERMINISTIC_RULE_LABELS[rt]}
           </option>
         ))}
       </select>
