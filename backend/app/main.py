@@ -95,4 +95,15 @@ async def websocket_dashboard(
 @app.on_event("startup")
 def startup():
     Base.metadata.create_all(bind=engine)
+
+    # Migrate: add hedera_tx_id columns if missing (teammate added these)
+    import sqlalchemy
+    with engine.connect() as conn:
+        for table in ["transactions", "evaluations", "human_approvals"]:
+            try:
+                conn.execute(sqlalchemy.text(f"SELECT hedera_tx_id FROM {table} LIMIT 1"))
+            except Exception:
+                conn.execute(sqlalchemy.text(f"ALTER TABLE {table} ADD COLUMN hedera_tx_id VARCHAR(100)"))
+                conn.commit()
+
     run_seed()
