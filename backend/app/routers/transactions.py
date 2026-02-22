@@ -51,11 +51,32 @@ def _extract_domain(url: str) -> str:
 
 
 def _parse_request_data(raw: str) -> TransactionRequestData:
-    """Parse request_data JSON blob into schema."""
+    """Parse request_data JSON blob into schema.
+
+    Supports both v2 nested format {product: {...}, chat_history: "..."}
+    and v1 flat format {product_name, price, merchant_url, ...}.
+    """
     try:
         data = json.loads(raw)
     except Exception:
         data = {}
+
+    # v2 nested format: {product: {product_name, price, ...}, chat_history}
+    if "product" in data and isinstance(data["product"], dict):
+        p = data["product"]
+        merchant_url = p.get("merchant_url", "")
+        return TransactionRequestData(
+            product_name=p.get("product_name", "Unknown"),
+            price=float(p.get("price", 0)),
+            currency=p.get("currency", "USD"),
+            merchant_name=p.get("merchant_name", "Unknown"),
+            merchant_url=merchant_url,
+            merchant_domain=_extract_domain(merchant_url) if merchant_url else None,
+            product_url=p.get("product_url"),
+            conversation_context=data.get("chat_history"),
+        )
+
+    # v1 flat format fallback
     merchant_url = data.get("merchant_url", "")
     return TransactionRequestData(
         product_name=data.get("product_name", "Unknown"),
@@ -367,13 +388,19 @@ async def respond_to_transaction(
     virtual_card_detail = None
 
     if body.action == "APPROVE":
-        # Parse price + merchant_domain from request_data blob
+        # Parse price + merchant_domain from request_data blob (v2 nested or v1 flat)
         try:
             request_data = json.loads(txn.request_data)
         except Exception:
             request_data = {}
-        price = float(request_data.get("price", 0))
-        merchant_domain = request_data.get("merchant_domain", "")
+        if "product" in request_data and isinstance(request_data["product"], dict):
+            p = request_data["product"]
+            price = float(p.get("price", 0))
+            merchant_url = p.get("merchant_url", "")
+            merchant_domain = _extract_domain(merchant_url) if merchant_url else ""
+        else:
+            price = float(request_data.get("price", 0))
+            merchant_domain = request_data.get("merchant_domain", "")
 
         # Resolve payment method: category preferred → user default → any active
         payment_method_id = category.payment_method_id if category else None
