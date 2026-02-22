@@ -9,8 +9,6 @@ import { useTransactions } from "@/hooks/useTransactions"
 import { formatCurrency } from "@/lib/utils"
 import { api } from "@/lib/api"
 
-const USE_MOCK = !import.meta.env.VITE_API_URL
-
 export function ApprovalsPage() {
   const navigate = useNavigate()
   const { transactions, loading, updateTransaction } = useTransactions()
@@ -20,27 +18,25 @@ export function ApprovalsPage() {
 
   async function handleApprove(id: string) {
     try {
-      await api.post(`/transactions/${id}/approve`, {
+      await api.post(`/transactions/${id}/respond`, {
+        action: "APPROVE",
         note: notes[id] || undefined,
       })
-    } catch {
-      // mock mode
-    }
-    if (USE_MOCK) {
       updateTransaction(id, { status: "HUMAN_APPROVED" })
+    } catch {
+      // handle error
     }
   }
 
   async function handleDeny(id: string) {
     try {
-      await api.post(`/transactions/${id}/deny`, {
+      await api.post(`/transactions/${id}/respond`, {
+        action: "DENY",
         note: notes[id] || undefined,
       })
-    } catch {
-      // mock mode
-    }
-    if (USE_MOCK) {
       updateTransaction(id, { status: "HUMAN_DENIED" })
+    } catch {
+      // handle error
     }
   }
 

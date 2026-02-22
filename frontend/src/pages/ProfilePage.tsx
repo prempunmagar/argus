@@ -14,10 +14,7 @@ import {
   type PaymentMethodFormData,
 } from "@/components/payment-methods/PaymentMethodFormDialog"
 import { api } from "@/lib/api"
-import { mockPaymentMethods } from "@/lib/mock-data"
 import type { PaymentMethod } from "@/lib/types"
-
-const USE_MOCK = !import.meta.env.VITE_API_URL
 
 export function ProfilePage() {
   const { user } = useAuth()
@@ -40,14 +37,10 @@ export function ProfilePage() {
   useEffect(() => {
     async function loadMethods() {
       try {
-        if (USE_MOCK) {
-          setMethods(mockPaymentMethods)
-        } else {
-          const { data } = await api.get("/payment-methods")
-          setMethods(data.payment_methods ?? data)
-        }
+        const { data } = await api.get("/payment-methods")
+        setMethods(data.payment_methods ?? data)
       } catch {
-        setMethods(mockPaymentMethods)
+        setMethods([])
       } finally {
         setMethodsLoading(false)
       }
@@ -97,60 +90,19 @@ export function ProfilePage() {
 
   async function handleSavePm(data: PaymentMethodFormData) {
     try {
-      if (USE_MOCK) {
-        if (editingMethod) {
-          setMethods((prev) =>
-            prev.map((m) => {
-              if (m.id === editingMethod.id) {
-                return {
-                  ...m,
-                  nickname: data.nickname,
-                  method_type: data.method_type,
-                  detail: data.detail,
-                  is_default: data.is_default,
-                }
-              }
-              if (data.is_default && m.is_default) {
-                return { ...m, is_default: false }
-              }
-              return m
-            })
-          )
-          toast.success("Payment method updated")
-        } else {
-          const newMethod: PaymentMethod = {
-            id: `pm-${Date.now()}`,
-            nickname: data.nickname,
-            method_type: data.method_type,
-            detail: data.detail,
-            is_default: data.is_default,
-            status: "active",
-          }
-          if (data.is_default) {
-            setMethods((prev) => [
-              ...prev.map((m) => ({ ...m, is_default: false })),
-              newMethod,
-            ])
-          } else {
-            setMethods((prev) => [...prev, newMethod])
-          }
-          toast.success("Payment method added")
-        }
+      if (editingMethod) {
+        const { data: updated } = await api.put(
+          `/payment-methods/${editingMethod.id}`,
+          data
+        )
+        setMethods((prev) =>
+          prev.map((m) => (m.id === editingMethod.id ? updated : m))
+        )
+        toast.success("Payment method updated")
       } else {
-        if (editingMethod) {
-          const { data: updated } = await api.put(
-            `/payment-methods/${editingMethod.id}`,
-            data
-          )
-          setMethods((prev) =>
-            prev.map((m) => (m.id === editingMethod.id ? updated : m))
-          )
-          toast.success("Payment method updated")
-        } else {
-          const { data: created } = await api.post("/payment-methods", data)
-          setMethods((prev) => [...prev, created])
-          toast.success("Payment method added")
-        }
+        const { data: created } = await api.post("/payment-methods", data)
+        setMethods((prev) => [...prev, created])
+        toast.success("Payment method added")
       }
       setPmDialogOpen(false)
     } catch {
@@ -160,9 +112,7 @@ export function ProfilePage() {
 
   async function handleDeletePm(id: string) {
     try {
-      if (!USE_MOCK) {
-        await api.delete(`/payment-methods/${id}`)
-      }
+      await api.delete(`/payment-methods/${id}`)
       setMethods((prev) => prev.filter((m) => m.id !== id))
       setPmDialogOpen(false)
       toast.success("Payment method removed")

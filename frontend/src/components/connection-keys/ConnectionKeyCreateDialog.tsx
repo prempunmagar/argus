@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label"
 interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onGenerate: (label: string) => string // returns the full key_value
+  onGenerate: (label: string) => string | Promise<string> // returns the full key_value
 }
 
 export function ConnectionKeyCreateDialog({ open, onOpenChange, onGenerate }: Props) {
@@ -31,10 +31,10 @@ export function ConnectionKeyCreateDialog({ open, onOpenChange, onGenerate }: Pr
     }
   }, [open])
 
-  function handleGenerate() {
+  async function handleGenerate() {
     if (!label.trim()) return
-    const key = onGenerate(label.trim())
-    setGeneratedKey(key)
+    const key = await onGenerate(label.trim())
+    if (key) setGeneratedKey(key)
   }
 
   async function handleCopy() {

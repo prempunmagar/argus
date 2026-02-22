@@ -8,10 +8,8 @@ import {
   type ReactNode,
 } from "react"
 import { api } from "@/lib/api"
-import { mockTransactions } from "@/lib/mock-data"
 import type { Transaction, TransactionStatus, WSMessage } from "@/lib/types"
 
-const USE_MOCK = !import.meta.env.VITE_API_URL
 const WS_URL = import.meta.env.VITE_WS_URL || "ws://localhost:8000/ws/dashboard"
 
 interface TransactionContextValue {
@@ -39,16 +37,12 @@ export function TransactionProvider({ children }: { children: ReactNode }) {
   const fetchTransactions = useCallback(async () => {
     setLoading(true)
     try {
-      if (USE_MOCK) {
-        setTransactions(mockTransactions)
-      } else {
-        const { data } = await api.get("/transactions", {
-          params: { limit: 50, sort: "created_at_desc" },
-        })
-        setTransactions(data.transactions)
-      }
+      const { data } = await api.get("/transactions", {
+        params: { limit: 50, sort: "created_at_desc" },
+      })
+      setTransactions(data.transactions)
     } catch {
-      if (USE_MOCK) setTransactions(mockTransactions)
+      setTransactions([])
     } finally {
       setLoading(false)
     }
