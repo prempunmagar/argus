@@ -81,12 +81,16 @@ This is the most important thing to understand. Everything we build serves this 
 
 5. ARGUS CORE API:
    a. Validates the agent's connection key → resolves to profile → to user
-   b. Sends product details to Gemini 2.0 Flash → gets category
-      (e.g., "Footwear") + risk assessment + intent match score
+   b. GEMINI CALL 1: Sends ONLY the chat history to Gemini 2.0 Flash
+      → extracts user intent + determines spending category.
+      Product details excluded from this call (security: prevents
+      prompt-injected agent from influencing categorization).
    c. Loads user's rules for that category (budget limits,
       merchant whitelist, auto-approve threshold, etc.)
    d. Runs deterministic rules engine against each rule
-   e. Makes decision: APPROVE, DENY, or HUMAN_NEEDED
+   e. GEMINI CALL 2: Sends full report (intent + category + product
+      + rules results) to Gemini → cross-checks product vs intent,
+      makes final decision: APPROVE, DENY, or HUMAN_NEEDED
 
 6. IF APPROVED: Argus generates a scoped single-use virtual card
    (mock for hackathon) with:
@@ -100,7 +104,8 @@ This is the most important thing to understand. Everything we build serves this 
 
 8. IF HUMAN_NEEDED: Dashboard gets real-time WebSocket notification.
    User sees approve/deny dialog with product details, price, and
-   Argus's reasoning. User clicks approve → card issued → returned
+   Argus's reasoning. User clicks approve or deny via the single
+   `/respond` endpoint → if approved, card issued → returned
    to agent. Plugin polls for the decision.
 
 9. AGENT receives card details and fills them into the checkout form
@@ -120,7 +125,7 @@ This is the most important thing to understand. Everything we build serves this 
 
 The brain of the system. A REST API with:
 - Auth endpoints (JWT for dashboard, connection key for agent)
-- The `/evaluate` endpoint (the critical one — receives purchase request, runs Gemini + rules engine, returns decision + optional virtual card)
+- The `/evaluate` endpoint (the critical one — receives purchase request, runs a 2-Gemini-call pipeline: Call 1 sends only chat history for intent extraction + categorization (security: isolates product details from category selection to prevent prompt injection), Call 2 sends the full report for final decision. Between the two calls, the deterministic rules engine runs. Returns decision + optional virtual card)
 - Transaction management (list, detail, approve, deny)
 - Category & rules management (CRUD)
 - WebSocket for real-time dashboard updates
@@ -131,7 +136,7 @@ The brain of the system. A REST API with:
 
 A plugin that runs inside the ADK agent process. It:
 - Intercepts `request_purchase` tool calls via `before_tool_callback`
-- Sends purchase details to Core API
+- Sends structured product details + chat history (text only, no attachments) to Core API
 - Handles the three response types (approve → return card, deny → return reason, human_needed → poll until resolved)
 - Also intercepts `type`/`input_text` calls to block any card number the agent tries to enter that wasn't issued by Argus (safety net)
 
@@ -217,7 +222,9 @@ A Google A2A protocol implementation that:
 3. Agent opens Amazon in Playwright browser, searches, browses results
 4. Agent finds shoes at ~$95 → calls request_purchase
 5. Dashboard shows transaction appear in real-time: "EVALUATING..."
-6. Argus evaluates: $95 > $80 auto-approve threshold → **DENIED**
+6. Argus evaluates: $95 > $80 auto-approve threshold (soft flag) →
+   Gemini Call 2 cross-checks: user said "under $80" but product is $95
+   → budget mismatch detected → **DENIED**
 7. Dashboard shows red DENIED badge with reason
 8. Agent automatically searches for cheaper alternatives
 9. Agent finds different shoes at ~$60 → calls request_purchase again
@@ -257,21 +264,25 @@ argus/
 │   │   │   ├── evaluate.py
 │   │   │   ├── transaction.py
 │   │   │   ├── category.py
-│   │   │   └── approval.py
-│   │   ├── routers/            # FastAPI route handlers
+│   │   │   ├── connection_key.py
+│   │   │   ├── payment_method.py
+│   │   │   └── profile.py
+│   │   ├── routers/            # FastAPI route handlers (thin — delegate to services)
 │   │   │   ├── __init__.py
 │   │   │   ├── auth.py
 │   │   │   ├── evaluate.py
-│   │   │   ├── transactions.py
+│   │   │   ├── transactions.py  # includes POST /transactions/{id}/respond
 │   │   │   ├── categories.py
-│   │   │   ├── approvals.py
-│   │   │   ├── agents.py
-│   │   │   ├── payment_methods.py
-│   │   │   └── health.py
-│   │   └── services/           # Business logic
+│   │   │   ├── profiles.py
+│   │   │   ├── connection_keys.py
+│   │   │   └── payment_methods.py
+│   │   └── services/           # Business logic (all DB access lives here)
 │   │       ├── __init__.py
-│   │       ├── gemini_evaluator.py
+│   │       ├── auth_service.py
+│   │       ├── evaluate_service.py  # orchestrates the full /evaluate pipeline
+│   │       ├── gemini_evaluator.py  # Call 1: extract_intent_and_category(), Call 2: make_final_decision()
 │   │       ├── rules_engine.py
+│   │       ├── spending_service.py  # get_spending_totals() daily/weekly/monthly
 │   │       ├── card_issuer.py
 │   │       └── websocket_manager.py
 │   ├── a2a/                    # A2A protocol
@@ -449,5 +460,5 @@ Build in this order. Items 1-3 are non-negotiable:
 - **Event:** LIVE AI Ivy Plus Hackathon 2026 (online — originally onsite, cancelled)
 - **Judging:** 8 criteria, 1-10 each: UI, UX, Tech Innovation, Code Quality, Production Values, Pitch, Market Fit, Disruptive Potential
 - **Deliverables:** 2-3 minute pitch video, Devpost submission, GitHub repo
-- **Global judges** evaluate videos over 2 weeks. They do NOT clone repos or test locally.
+- **Global judges** evaluate videos over 2 weeks.
 - **What wins:** Working demo > code quality. Professional UI > feature count. Compelling story > technical depth. Real API integrations > mocks.

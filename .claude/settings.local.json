@@ -16,7 +16,11 @@
       "Bash(powershell -Command \"Copy-Item -Path ''C:\\\\Users\\\\prems\\\\Downloads\\\\argus\\\\frontend\\\\@\\\\components\\\\ui\\\\textarea.tsx'' -Destination ''C:\\\\Users\\\\prems\\\\Downloads\\\\argus\\\\frontend\\\\src\\\\components\\\\ui\\\\textarea.tsx'' -Force; Remove-Item -Recurse -Force ''C:\\\\Users\\\\prems\\\\Downloads\\\\argus\\\\frontend\\\\@''\")",
       "Bash(npx vite build)",
       "Bash(git remote set-url:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(python -c:*)",
+      "Bash(taskkill:*)",
+      "Bash(curl:*)",
+      "Bash(python -m json.tool:*)"
     ]
   }
 }

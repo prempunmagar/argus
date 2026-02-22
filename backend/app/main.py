@@ -8,10 +8,10 @@ from app.routers import auth, health
 from app.routers import evaluate as evaluate_router
 from app.routers import transactions as transactions_router
 from app.routers import categories as categories_router
-from app.routers import approvals as approvals_router
-from app.routers import agents as agents_router
+from app.routers import profiles as profiles_router
+from app.routers import connection_keys as connection_keys_router
 from app.routers import payment_methods as payment_methods_router
-from app.services.auth import decode_jwt
+from app.services.auth_service import decode_jwt
 from app.services.websocket_manager import ws_manager
 
 # --- Create the FastAPI app ---
@@ -44,12 +44,11 @@ app.include_router(transactions_router.router, prefix="/api/v1")
 # Categories endpoints: GET/POST /api/v1/categories, PUT /api/v1/categories/{id}
 app.include_router(categories_router.router, prefix="/api/v1")
 
-# Approval endpoints: POST /api/v1/transactions/{id}/approve, /deny
-app.include_router(approvals_router.router, prefix="/api/v1")
+# Profiles: GET/POST /api/v1/profiles, PUT /api/v1/profiles/{id}
+app.include_router(profiles_router.router, prefix="/api/v1")
 
-# Profiles + connection keys: GET/POST /api/v1/profiles, PUT /api/v1/profiles/{id}
-#                             GET/POST /api/v1/connection-keys, DELETE /api/v1/connection-keys/{id}
-app.include_router(agents_router.router, prefix="/api/v1")
+# Connection keys: GET/POST /api/v1/connection-keys, DELETE /api/v1/connection-keys/{id}
+app.include_router(connection_keys_router.router, prefix="/api/v1")
 
 # Payment methods: GET/POST /api/v1/payment-methods
 app.include_router(payment_methods_router.router, prefix="/api/v1")

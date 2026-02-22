@@ -4,25 +4,24 @@ from typing import Optional, List
 
 # --- Request ---
 
-class EvaluateMetadata(BaseModel):
-    agent_framework: Optional[str] = None
-    agent_name: Optional[str] = None
-    session_id: Optional[str] = None
+class ProductInfo(BaseModel):
+    """Nested product details within EvaluateRequest."""
+    product_name: str
+    price: float
+    currency: str = "USD"
+    merchant_name: str
+    merchant_url: str
+    product_url: Optional[str] = None
+    notes: Optional[str] = None
 
 
 class EvaluateRequest(BaseModel):
     """
     Request body for POST /evaluate.
-    Required: product_name, price, merchant_name, merchant_url
+    Nested structure: product details + chat history.
     """
-    product_name: str
-    product_url: Optional[str] = None
-    price: float
-    currency: str = "USD"
-    merchant_name: str
-    merchant_url: str
-    conversation_context: Optional[str] = None
-    metadata: Optional[EvaluateMetadata] = None
+    product: ProductInfo
+    chat_history: str = ""
 
 
 # --- Response sub-objects ---
@@ -40,6 +39,9 @@ class RuleResult(BaseModel):
     actual: Optional[float] = None
     breakdown: Optional[dict] = None   # {"previously_spent": x, "this_transaction": y} for limit rules
     merchant_domain: Optional[str] = None
+    rule_id: Optional[str] = None      # for CUSTOM_RULE
+    prompt: Optional[str] = None       # for CUSTOM_RULE
+    status: Optional[str] = None       # for CUSTOM_RULE: "pending_ai"
     passed: bool
     detail: str
 

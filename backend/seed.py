@@ -21,7 +21,7 @@ from app.models import (
     CategoryRule,
     ConnectionKey,
 )
-from app.services.auth import hash_password
+from app.services.auth_service import hash_password
 
 
 def seed():

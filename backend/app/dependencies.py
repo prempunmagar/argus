@@ -8,7 +8,7 @@ from app.database import get_db
 from app.models.user import User
 from app.models.profile import Profile
 from app.models.connection_key import ConnectionKey
-from app.services.auth import decode_jwt
+from app.services.auth_service import decode_jwt
 
 
 @dataclass
@@ -99,7 +99,7 @@ def _auth_jwt(token: str, db: Session) -> User:
     return user
 
 
-def get_agent_context(
+def get_connection_key_context(
     authorization: str = Header(..., description="Bearer <argus_ck_...>"),
     db: Session = Depends(get_db),
 ) -> AgentContext:

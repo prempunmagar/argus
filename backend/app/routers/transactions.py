@@ -8,15 +8,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.dependencies import get_current_user, get_agent_context, AgentContext
+from app.dependencies import get_current_user, get_connection_key_context, AgentContext
 from app.models.evaluation import Evaluation
 from app.models.human_approval import HumanApproval
+from app.models.payment_method import PaymentMethod
 from app.models.spending_category import SpendingCategory
 from app.models.transaction import Transaction
 from app.models.virtual_card import VirtualCard
 from app.models.profile import Profile
 from app.models.user import User
 from app.schemas.transaction import (
+    RespondRequest,
+    RespondResponse,
     TransactionDetail,
     TransactionEvaluationDetail,
     TransactionEvaluationSummary,
@@ -26,6 +29,8 @@ from app.schemas.transaction import (
     TransactionStatusResponse,
     VirtualCardDetail,
 )
+from app.services.card_issuer import issue_mock_card
+from app.services.websocket_manager import ws_manager
 
 logger = logging.getLogger(__name__)
 
@@ -237,7 +242,7 @@ def get_transaction(
 @router.get("/transactions/{transaction_id}/status", response_model=TransactionStatusResponse)
 def get_transaction_status(
     transaction_id: str,
-    agent_ctx: AgentContext = Depends(get_agent_context),
+    agent_ctx: AgentContext = Depends(get_connection_key_context),
     db: Session = Depends(get_db),
 ):
     """
@@ -297,4 +302,171 @@ def get_transaction_status(
         virtual_card=virtual_card,
         waited_seconds=waited_seconds,
         timeout_seconds=_HUMAN_APPROVAL_TIMEOUT,
+    )
+
+
+# ── POST /transactions/{id}/respond ──────────────────────────────────────────
+
+@router.post("/transactions/{transaction_id}/respond", response_model=RespondResponse)
+async def respond_to_transaction(
+    transaction_id: str,
+    body: RespondRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    POST /transactions/{id}/respond — Dashboard user approves or denies a pending transaction.
+
+    Request body: {action: "APPROVE"|"DENY", note?: str}
+    Returns 200 with body:
+      - APPROVE → includes virtual_card details
+      - DENY → includes reason
+
+    Auth: JWT.
+    """
+    if body.action not in ("APPROVE", "DENY"):
+        raise HTTPException(status_code=400, detail="action must be 'APPROVE' or 'DENY'")
+
+    # Load and validate transaction
+    txn = db.query(Transaction).filter(
+        Transaction.id == transaction_id,
+        Transaction.user_id == current_user.id,
+    ).first()
+    if not txn:
+        raise HTTPException(status_code=404, detail="Transaction not found")
+    if txn.status != "HUMAN_NEEDED":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Transaction cannot be responded to — current status is '{txn.status}'"
+        )
+
+    # Load evaluation (needed for category + WS message)
+    evaluation = db.query(Evaluation).filter(
+        Evaluation.transaction_id == transaction_id
+    ).first()
+    if not evaluation:
+        raise HTTPException(status_code=500, detail="Evaluation record missing")
+
+    # Load category for WS message + payment method resolution
+    category = None
+    if evaluation.category_id:
+        category = db.query(SpendingCategory).filter(
+            SpendingCategory.id == evaluation.category_id
+        ).first()
+    category_name = category.name if category else "Unknown"
+
+    # Update HumanApproval row
+    approval = db.query(HumanApproval).filter(
+        HumanApproval.transaction_id == transaction_id
+    ).first()
+    if approval:
+        approval.value = body.action
+        approval.responded_at = datetime.now(timezone.utc)
+        approval.note = body.note
+
+    virtual_card_detail = None
+
+    if body.action == "APPROVE":
+        # Parse price + merchant_domain from request_data blob
+        try:
+            request_data = json.loads(txn.request_data)
+        except Exception:
+            request_data = {}
+        price = float(request_data.get("price", 0))
+        merchant_domain = request_data.get("merchant_domain", "")
+
+        # Resolve payment method: category preferred → user default → any active
+        payment_method_id = category.payment_method_id if category else None
+        if not payment_method_id:
+            default_pm = db.query(PaymentMethod).filter(
+                PaymentMethod.user_id == current_user.id,
+                PaymentMethod.is_default == True,
+                PaymentMethod.status == "active",
+            ).first()
+            if default_pm:
+                payment_method_id = default_pm.id
+        if not payment_method_id:
+            any_pm = db.query(PaymentMethod).filter(
+                PaymentMethod.user_id == current_user.id,
+                PaymentMethod.status == "active",
+            ).first()
+            if any_pm:
+                payment_method_id = any_pm.id
+        if not payment_method_id:
+            payment_method_id = "none"
+
+        # Issue mock virtual card
+        card_data = issue_mock_card(transaction_id, price, merchant_domain)
+
+        # Persist VirtualCard row
+        vc = VirtualCard(
+            transaction_id=transaction_id,
+            user_id=current_user.id,
+            payment_method_id=payment_method_id,
+            external_card_id=card_data["external_card_id"],
+            card_number=card_data["card_number"],
+            expiry_month=card_data["expiry_month"],
+            expiry_year=card_data["expiry_year"],
+            cvv=card_data["cvv"],
+            last_four=card_data["last_four"],
+            spend_limit=card_data["spend_limit"],
+            spend_limit_buffer=card_data["spend_limit_buffer"],
+            merchant_lock=card_data["merchant_lock"],
+            status="ACTIVE",
+            issued_at=card_data["issued_at"],
+            expires_at=card_data["expires_at"],
+        )
+        db.add(vc)
+
+        # Update Transaction status
+        txn.status = "HUMAN_APPROVED"
+        txn.updated_at = datetime.now(timezone.utc)
+
+        db.commit()
+
+        virtual_card_detail = _build_virtual_card_detail(vc)
+        reason = f"Approved by user. {body.note or ''}".strip()
+
+        # Broadcast TRANSACTION_DECIDED
+        await ws_manager.send_to_user(current_user.id, {
+            "type": "TRANSACTION_DECIDED",
+            "data": {
+                "transaction_id": transaction_id,
+                "decision": "APPROVE",
+                "reason": reason,
+                "category_name": category_name,
+                "virtual_card_last_four": card_data["last_four"],
+            },
+        })
+
+        logger.info(f"Respond APPROVE: txn={transaction_id} user={current_user.id} card_last_four={card_data['last_four']}")
+
+    else:
+        # DENY
+        txn.status = "HUMAN_DENIED"
+        txn.updated_at = datetime.now(timezone.utc)
+
+        db.commit()
+
+        reason = f"Denied by user. {body.note or ''}".strip()
+
+        # Broadcast TRANSACTION_DECIDED
+        await ws_manager.send_to_user(current_user.id, {
+            "type": "TRANSACTION_DECIDED",
+            "data": {
+                "transaction_id": transaction_id,
+                "decision": "DENY",
+                "reason": reason,
+                "category_name": category_name,
+                "virtual_card_last_four": None,
+            },
+        })
+
+        logger.info(f"Respond DENY: txn={transaction_id} user={current_user.id} note={body.note!r}")
+
+    return RespondResponse(
+        transaction_id=transaction_id,
+        action=body.action,
+        reason=reason,
+        virtual_card=virtual_card_detail,
     )

@@ -13,7 +13,7 @@ from app.schemas.auth import (
     UserResponse,
     ErrorResponse,
 )
-from app.services.auth import hash_password, verify_password, create_jwt
+from app.services.auth_service import hash_password, verify_password, create_jwt
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 

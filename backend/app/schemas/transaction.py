@@ -93,3 +93,17 @@ class TransactionStatusResponse(BaseModel):
     virtual_card: Optional[VirtualCardDetail] = None
     waited_seconds: Optional[int] = None
     timeout_seconds: int = 300
+
+
+# ── POST /transactions/{id}/respond ──────────────────────────────────────────
+
+class RespondRequest(BaseModel):
+    action: str            # "APPROVE" or "DENY"
+    note: Optional[str] = None   # optional user note
+
+
+class RespondResponse(BaseModel):
+    transaction_id: str
+    action: str            # "APPROVE" or "DENY"
+    reason: str
+    virtual_card: Optional[VirtualCardDetail] = None

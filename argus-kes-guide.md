@@ -25,7 +25,7 @@ There are two consumers of your API:
 
 1. **The ADK Plugin** (which you also build) — calls `POST /evaluate` with agent key auth when the shopping agent wants to buy something. Also polls `GET /transactions/{id}/status` during human approval flow.
 
-2. **The React Dashboard** (Prem builds) — calls all other endpoints with JWT auth. Login, list transactions, view categories, approve/deny purchases, manage agent keys. Also connects via WebSocket for real-time updates.
+2. **The React Dashboard** (Prem builds) — calls all other endpoints with JWT auth. Login, list transactions, view categories, approve/deny purchases, manage connection keys. Also connects via WebSocket for real-time updates.
 
 The plugin and dashboard never talk to each other directly. They both talk to your API, and your API coordinates everything (including pushing WebSocket updates when things change).
 
@@ -173,14 +173,13 @@ id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
 |--------|------|------|-----------|---------|
 | GET | `/api/v1/transactions` | JWT | Dashboard | List transactions (filterable, paginated) |
 | GET | `/api/v1/transactions/{id}` | JWT | Dashboard | Full transaction detail |
-| POST | `/api/v1/transactions/{id}/approve` | JWT | Dashboard | User approves pending transaction |
-| POST | `/api/v1/transactions/{id}/deny` | JWT | Dashboard | User denies pending transaction |
+| POST | `/api/v1/transactions/{id}/respond` | JWT | Dashboard | User approves or denies pending transaction |
 | GET | `/api/v1/categories` | JWT | Dashboard | List categories with rules + spending totals |
 | POST | `/api/v1/categories` | JWT | Dashboard | Create new category |
 | PUT | `/api/v1/categories/{id}` | JWT | Dashboard | Edit category |
-| GET | `/api/v1/agent-keys` | JWT | Dashboard | List agent keys (prefix only) |
-| POST | `/api/v1/agent-keys` | JWT | Dashboard | Generate new key (returns full key ONCE) |
-| DELETE | `/api/v1/agent-keys/{id}` | JWT | Dashboard | Revoke key |
+| GET | `/api/v1/connection-keys` | JWT | Dashboard | List connection keys (prefix only) |
+| POST | `/api/v1/connection-keys` | JWT | Dashboard | Generate new key (returns full key ONCE) |
+| DELETE | `/api/v1/connection-keys/{id}` | JWT | Dashboard | Revoke key |
 | GET | `/api/v1/payment-methods` | JWT | Dashboard | List payment methods |
 | POST | `/api/v1/payment-methods` | JWT | Dashboard | Add payment method |
 | WS | `/ws/dashboard` | JWT (query param) | Dashboard | Real-time transaction updates |
@@ -208,7 +207,7 @@ STEP 2: Extract merchant domain
 
 STEP 3: Create transaction row
   - Status: PENDING_EVALUATION
-  - Store full request as request_data JSON
+  - Store full request as request_data JSON: {product: {...}, chat_history: "..."}
   - Denormalize user_id onto the transaction
   - Return transaction_id
 
@@ -217,76 +216,45 @@ STEP 4: Load profile's spending categories
   - Include name, description, keywords
   - Used to populate the Gemini prompt
 
-STEP 5: Call Gemini 2.0 Flash
-  - Send categories + product details + conversation context + any CUSTOM_RULE prompts
-  - Prompt is in argus-data-spec.md Section 9.1
-  - Parse JSON response: category_name, category_confidence,
-    intent_match, intent_summary, risk_flags, reasoning, custom_rule_results
-  - If Gemini fails: retry once. If still fails (or no API key), return
-    a mock stub response using the profile's default category.
-    Sufficient for local testing — no keyword matching needed.
+STEP 5: GEMINI CALL 1 — Extract intent + category
+  - Send ONLY chat_history + category list (NO product details in prompt)
+  - Security: category comes from user intent, not agent claims
+  - Returns: intent (want, budget, preferences) + category (name, confidence)
+  - If fails: retry once → _mock_response() (default category, 0.90 confidence)
 
-STEP 6: Match category
+STEP 6: Match category to SpendingCategory row
   - Find spending_category WHERE name = gemini_response.category_name
     AND profile_id = resolved_profile
   - If no match: use the profile's default category (is_default=true)
 
-STEP 7: Load rules for matched category
-  - All active category_rules for this category_id (is_active=true)
+STEP 7: Calculate spending totals
+  - SUM price from transactions WHERE category matches
+    AND status in (AI_APPROVED, HUMAN_APPROVED, COMPLETED)
+  - Calculate daily, weekly, monthly totals
 
 STEP 8: Run rules engine
-  - Create evaluation row with Gemini output (category_id, confidence, intent_match, risk_flags, reasoning)
-  - For each rule, evaluate and record result:
+  - Returns outcome (HARD_DENY / SOFT_FLAGS / ALL_PASS) + checks
+  - CUSTOM_RULE recorded as pending_ai (evaluated by Call 2)
+  - Rules engine no longer makes final decision
 
-  MAX_PER_TRANSACTION:
-    pass if price <= threshold
+STEP 9: Assemble full report (intent + category + product + rules)
 
-  DAILY_LIMIT:
-    SUM price from transactions WHERE category matches AND status in (AI_APPROVED, HUMAN_APPROVED, COMPLETED)
-    AND created today. Pass if (total + price) <= threshold
+STEP 10: Decision routing
+  IF HARD_DENY → decision = DENY, skip Gemini Call 2
+  ELSE → proceed to step 11
 
-  WEEKLY_LIMIT:
-    Same but for current week
+STEP 11: GEMINI CALL 2 — Final decision
+  - Send full report + CUSTOM_RULE prompts
+  - Cross-checks: product vs intent, price vs budget, agent drift
+  - Returns: decision, reasoning, confidence, risk_flags
+  - If fails: conservative HUMAN_NEEDED
 
-  MONTHLY_LIMIT:
-    Same but for current month
+STEP 12: Apply guardrails
+  - ALWAYS_REQUIRE_APPROVAL → force HUMAN_NEEDED
+  - AUTO_APPROVE_UNDER fail → force HUMAN_NEEDED
+  - Low AI confidence → force HUMAN_NEEDED
 
-  AUTO_APPROVE_UNDER:
-    pass if price < threshold
-    (this is a "soft" rule — failing doesn't deny, just prevents auto-approve)
-
-  MERCHANT_WHITELIST:
-    Parse JSON array of allowed domains
-    pass if merchant_domain is in the list
-
-  MERCHANT_BLACKLIST:
-    Parse JSON array of blocked domains
-    pass if merchant_domain is NOT in the list
-
-  ALWAYS_REQUIRE_APPROVAL:
-    If "true" → flag for human review
-
-  BLOCK_CATEGORY:
-    If "true" → immediate deny
-
-  CUSTOM_RULE:
-    AI-evaluated — pass/fail comes from Gemini's custom_rule_results
-
-  Record each check in rules_checked JSON on the evaluation.
-
-STEP 9: Make decision (set on evaluation row)
-  Priority logic:
-  1. If BLOCK_CATEGORY → DENY
-  2. If any hard-fail (MAX_PER_TRANSACTION failed, DAILY/WEEKLY/MONTHLY
-     LIMIT exceeded, MERCHANT_BLACKLIST hit, MERCHANT_WHITELIST failed) → DENY
-  3. If any CUSTOM_RULE failed → HUMAN_NEEDED
-  4. If ALWAYS_REQUIRE_APPROVAL → HUMAN_NEEDED
-  5. If AUTO_APPROVE_UNDER failed (price above threshold) and
-     no hard-fail → HUMAN_NEEDED
-  6. If Gemini intent_match < 0.5 or critical risk_flags → HUMAN_NEEDED
-  7. Otherwise → APPROVE
-
-STEP 10: Execute decision
+STEP 13: Execute decision
   IF APPROVE:
     - Determine payment method (category's payment_method_id,
       fallback to user's default)
@@ -304,7 +272,7 @@ STEP 10: Execute decision
     - Create human_approval row (with transaction_id + evaluation_id)
     - Update transaction: status = HUMAN_NEEDED
     - Broadcast via WebSocket: APPROVAL_REQUIRED
-    - Return response with timeout_seconds (plugin polls GET /transactions/{id}/status)
+    - Return response with poll_url and timeout info
 ```
 
 **Full request/response JSON examples are in argus-data-spec.md Section 3.4.** Copy them exactly.
@@ -319,22 +287,24 @@ import json
 
 genai.configure(api_key=settings.google_api_key)
 
-async def evaluate_purchase(categories, product_name, price, currency,
-                            merchant_name, merchant_url, conversation_context):
-    """Call Gemini 2.0 Flash for category detection + risk assessment."""
-    
+async def extract_intent_and_category(chat_history: str, categories: list) -> dict:
+    """
+    GEMINI CALL 1: Extract user intent and category from chat history.
+    NO product details in prompt (security isolation).
+    Returns: {intent: {want, budget, preferences, summary}, category: {name, confidence}}
+    """
+
     model = genai.GenerativeModel(settings.gemini_eval_model)
-    
-    # Build prompt — full prompt template in argus-data-spec.md Section 9.1
+
     categories_json = json.dumps([{
         "name": c.name,
         "description": c.description,
-        "keywords": json.loads(c.keywords) if c.keywords else [],
         "is_default": c.is_default
     } for c in categories], indent=2)
-    
-    prompt = f"""..."""  # Full prompt from data spec Section 9.1
-    
+
+    # Prompt sends ONLY chat_history + category list — no product details
+    prompt = f"""..."""  # Full prompt from data spec Section 9.1 (Call 1)
+
     try:
         response = model.generate_content(
             prompt,
@@ -348,22 +318,77 @@ async def evaluate_purchase(categories, product_name, price, currency,
     except Exception as e:
         # Retry once
         try:
-            response = model.generate_content(prompt, ...)
+            response = model.generate_content(prompt,
+                generation_config=genai.GenerationConfig(
+                    temperature=0.1,
+                    response_mime_type="application/json"
+                )
+            )
             return json.loads(response.text)
         except:
-            # Mock stub fallback — use default category, high confidence, no risk flags
-            return _mock_response(product_name, categories)
+            # Mock fallback — default category, high confidence, no risk flags
+            return _mock_response(product_name="unknown", categories=categories)
 
-def _mock_response(product_name, categories):
-    """Stub when Gemini is unavailable or no API key configured."""
-    default_cat = next((c for c in categories if c.get("is_default")), categories[0])
+
+async def make_final_decision(report: dict, custom_rules: list = None) -> dict:
+    """
+    GEMINI CALL 2: Given full report, cross-check intent vs product and decide.
+    Returns: {decision, reasoning, confidence, risk_flags, intent_match, custom_rule_results}
+    Only called when rules outcome is not HARD_DENY.
+    """
+
+    model = genai.GenerativeModel(settings.gemini_eval_model)
+
+    # Send full report: intent + category + product + rules checks + custom rules
+    prompt = f"""..."""  # Full prompt from data spec Section 9.2 (Call 2)
+
+    try:
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.GenerationConfig(
+                temperature=0.1,
+                response_mime_type="application/json"
+            )
+        )
+        result = json.loads(response.text)
+        return result
+    except Exception as e:
+        # Retry once
+        try:
+            response = model.generate_content(prompt,
+                generation_config=genai.GenerationConfig(
+                    temperature=0.1,
+                    response_mime_type="application/json"
+                )
+            )
+            return json.loads(response.text)
+        except:
+            # Conservative fallback — escalate to human
+            return {
+                "decision": "HUMAN_NEEDED",
+                "reasoning": "Gemini was unavailable for final decision. Escalating to human.",
+                "confidence": 0.0,
+                "risk_flags": ["ai_evaluation_degraded"],
+                "intent_match": 0.5,
+                "custom_rule_results": []
+            }
+
+
+def _mock_response(product_name: str, categories: list) -> dict:
+    """
+    Stub response used when no GOOGLE_API_KEY is configured or Gemini fails.
+    Returns the default category with high confidence and no risk flags so the
+    rules engine runs cleanly against real seed data during local testing.
+    """
+    default_cat = next((c for c in categories if c.get("is_default")), None)
+    category_name = default_cat["name"] if default_cat else (categories[0]["name"] if categories else "General")
     return {
-        "category_name": default_cat["name"],
+        "category_name": category_name,
         "category_confidence": 0.90,
         "intent_match": 0.90,
-        "intent_summary": f"[MOCK] {product_name} → {default_cat['name']}. Gemini not configured.",
+        "intent_summary": f"[MOCK] {product_name} assigned to {category_name}. Gemini not configured.",
         "risk_flags": [],
-        "reasoning": "[MOCK] No GOOGLE_API_KEY. Stub response for local testing.",
+        "reasoning": "[MOCK] Gemini unavailable. Returning stub response.",
         "custom_rule_results": []
     }
 ```
@@ -376,29 +401,30 @@ def _mock_response(product_name, categories):
 def evaluate_rules(rules, price, merchant_domain, ledger_data):
     """
     Run each rule deterministically. Return list of check results
-    and the final decision.
-    
+    and an outcome classification. CUSTOM_RULE is NOT evaluated here —
+    it is recorded as pending_ai and evaluated by Gemini Call 2.
+
     rules: list of CategoryRule objects
     price: float
     merchant_domain: str
     ledger_data: dict with keys "daily", "weekly", "monthly" → float totals
-    
-    Returns: (decision: str, checks: list[dict])
+
+    Returns: (outcome: str, checks: list[dict])
+      outcome: "HARD_DENY" | "SOFT_FLAGS" | "ALL_PASS"
     """
     checks = []
     has_hard_fail = False
-    requires_approval = False
-    can_auto_approve = True  # Start true, set false if AUTO_APPROVE_UNDER fails
-    
+    has_soft_flag = False
+
     for rule in rules:
         if not rule.is_active:
             continue
-        
+
         check = {
             "rule_id": rule.id,
             "rule_type": rule.rule_type,
         }
-        
+
         if rule.rule_type == "MAX_PER_TRANSACTION":
             threshold = float(rule.value)
             passed = price <= threshold
@@ -410,7 +436,7 @@ def evaluate_rules(rules, price, merchant_domain, ledger_data):
             })
             if not passed:
                 has_hard_fail = True
-                
+
         elif rule.rule_type == "DAILY_LIMIT":
             threshold = float(rule.value)
             spent = ledger_data.get("daily", 0.0)
@@ -425,7 +451,7 @@ def evaluate_rules(rules, price, merchant_domain, ledger_data):
             })
             if not passed:
                 has_hard_fail = True
-                
+
         elif rule.rule_type == "WEEKLY_LIMIT":
             threshold = float(rule.value)
             spent = ledger_data.get("weekly", 0.0)
@@ -440,7 +466,7 @@ def evaluate_rules(rules, price, merchant_domain, ledger_data):
             })
             if not passed:
                 has_hard_fail = True
-                
+
         elif rule.rule_type == "MONTHLY_LIMIT":
             threshold = float(rule.value)
             spent = ledger_data.get("monthly", 0.0)
@@ -455,7 +481,7 @@ def evaluate_rules(rules, price, merchant_domain, ledger_data):
             })
             if not passed:
                 has_hard_fail = True
-                
+
         elif rule.rule_type == "AUTO_APPROVE_UNDER":
             threshold = float(rule.value)
             passed = price < threshold
@@ -466,8 +492,8 @@ def evaluate_rules(rules, price, merchant_domain, ledger_data):
                 "detail": f"{price} {'<' if passed else '>='} {threshold}"
             })
             if not passed:
-                can_auto_approve = False
-                
+                has_soft_flag = True
+
         elif rule.rule_type == "MERCHANT_WHITELIST":
             whitelist = json.loads(rule.value)
             passed = merchant_domain in whitelist
@@ -479,7 +505,7 @@ def evaluate_rules(rules, price, merchant_domain, ledger_data):
             })
             if not passed:
                 has_hard_fail = True
-                
+
         elif rule.rule_type == "MERCHANT_BLACKLIST":
             blacklist = json.loads(rule.value)
             passed = merchant_domain not in blacklist
@@ -491,17 +517,17 @@ def evaluate_rules(rules, price, merchant_domain, ledger_data):
             })
             if not passed:
                 has_hard_fail = True
-                
+
         elif rule.rule_type == "ALWAYS_REQUIRE_APPROVAL":
             if rule.value.lower() == "true":
-                requires_approval = True
+                has_soft_flag = True
                 check.update({
                     "passed": False,
                     "detail": "All purchases in this category require manual approval"
                 })
             else:
                 check.update({"passed": True, "detail": "Not enforced"})
-                
+
         elif rule.rule_type == "BLOCK_CATEGORY":
             if rule.value.lower() == "true":
                 has_hard_fail = True
@@ -511,20 +537,28 @@ def evaluate_rules(rules, price, merchant_domain, ledger_data):
                 })
             else:
                 check.update({"passed": True, "detail": "Not blocked"})
-        
+
+        elif rule.rule_type == "CUSTOM_RULE":
+            # NOT evaluated here — recorded as pending_ai for Gemini Call 2
+            has_soft_flag = True
+            check.update({
+                "passed": None,
+                "status": "pending_ai",
+                "detail": "Will be evaluated by Gemini Call 2",
+                "prompt": rule.value
+            })
+
         checks.append(check)
-    
-    # Decision logic
+
+    # Outcome classification (not a final decision)
     if has_hard_fail:
-        decision = "DENY"
-    elif requires_approval:
-        decision = "HUMAN_NEEDED"
-    elif not can_auto_approve:
-        decision = "HUMAN_NEEDED"
+        outcome = "HARD_DENY"
+    elif has_soft_flag:
+        outcome = "SOFT_FLAGS"
     else:
-        decision = "APPROVE"
-    
-    return decision, checks
+        outcome = "ALL_PASS"
+
+    return outcome, checks
 ```
 
 ---
@@ -732,15 +766,22 @@ class ArgusPlugin:
     def _handle_purchase_request(self, args, tool_context):
         """Intercept purchase request, call Argus API."""
         headers = {"Authorization": f"Bearer {self.connection_key}"}
+
+        # Collect chat history from ADK session
+        chat_history = self._extract_chat_history(tool_context)
+
         body = {
-            "product_name": args.get("product_name"),
-            "price": args.get("price"),
-            "merchant_name": args.get("merchant_name"),
-            "merchant_url": args.get("merchant_url"),
-            "product_url": args.get("product_url"),
-            "conversation_context": args.get("conversation_context"),
+            "product": {
+                "product_name": args.get("product_name"),
+                "price": args.get("price"),
+                "merchant_name": args.get("merchant_name"),
+                "merchant_url": args.get("merchant_url"),
+                "product_url": args.get("product_url"),
+                "notes": args.get("notes"),
+            },
+            "chat_history": chat_history
         }
-        
+
         response = httpx.post(
             f"{self.argus_api_url}/evaluate",
             json=body,
@@ -831,6 +872,17 @@ class ArgusPlugin:
                     "action": "Call request_purchase before entering any card details."
                 }
         return None  # Allow
+
+    def _extract_chat_history(self, tool_context) -> str:
+        """
+        Extract conversation history from ADK session as plain text.
+        Returns formatted string: "User: ...\nAgent: ...\n..."
+        Only text messages, no attachments/screenshots.
+        """
+        # TODO: Implement based on ADK session API
+        # Access tool_context.session or equivalent to get message history
+        # Format each message as "Role: content\n"
+        return ""
 ```
 
 **File: agent/argus_plugin/request_purchase.py**
@@ -842,23 +894,23 @@ def request_purchase(
     merchant_name: str,
     merchant_url: str,
     product_url: str = None,
-    conversation_context: str = None
+    notes: str = None
 ) -> dict:
     """Request authorization to purchase a product through Argus.
-    
+
     You MUST call this tool before entering any payment information.
     This tool verifies the purchase against user spending rules and
     returns payment card details if approved.
-    
+
     Args:
         product_name: The exact name of the product being purchased.
         price: The exact price shown at checkout, in USD.
         merchant_name: The name of the store/merchant.
         merchant_url: The full URL of the checkout page.
         product_url: The URL of the product detail page (optional).
-        conversation_context: Brief summary of what the user asked for
-                              and why you selected this product (optional).
-    
+        notes: Any additional context about the purchase, such as
+               color, size, or reason for selection (optional).
+
     Returns:
         dict with 'status' ('approved', 'denied', or 'human_needed').
         If approved: includes card_number, expiry_month, expiry_year, cvv.
@@ -1046,9 +1098,9 @@ Write for judges evaluating Code Quality:
 4. **GET /transactions** → So Prem can display the transaction feed
 5. **WebSocket** → So Prem can get real-time updates
 6. **GET /categories** → Dashboard categories page
-7. **Approve/deny endpoints** → Dashboard approval flow
+7. **POST /transactions/{id}/respond endpoint** → Dashboard approval flow
 8. **ADK Plugin** → So Prem can test the full agent flow
-9. **Other CRUD endpoints** → Agent keys, payment methods
+9. **Other CRUD endpoints** → Connection keys, payment methods
 10. **A2A endpoint** → Innovation differentiator
 11. **Docker + deploy** → Get it live
 12. **README + ARCHITECTURE.md** → Code quality score
@@ -1063,7 +1115,7 @@ Write for judges evaluating Code Quality:
 
 **Checkpoint 3 (Hour ~6):** POST /evaluate fully working. Plugin built. Prem connects agent → runs first end-to-end test.
 
-**Checkpoint 4 (Hour ~8):** Approve/deny working. WebSocket broadcasts approvals. Prem tests full human-in-the-loop flow.
+**Checkpoint 4 (Hour ~8):** POST /respond working. WebSocket broadcasts approvals. Prem tests full human-in-the-loop flow.
 
 **Checkpoint 5 (Hour ~10):** Everything deployed. Prem records demo video.
 
