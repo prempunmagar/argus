@@ -1,0 +1,10 @@
+# Build context is repo root; exclude backend cruft from COPY backend/
+backend/__pycache__
+backend/**/__pycache__
+backend/*.pyc
+backend/.env
+backend/*.db
+backend/.venv
+backend/venv
+backend/.env.local
+backend/*.log
