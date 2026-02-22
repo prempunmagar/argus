@@ -118,7 +118,7 @@ transactions
 | 2.1 | `users` | User accounts + auth | Account-level |
 | 2.2 | `profiles` | Agent profiles — spending rule groups | Per-user |
 | 2.3 | `payment_methods` | Funding sources (cards, banks, crypto) | Per-user (account-level) |
-| 2.4 | `spending_categories` | Named budgets with keywords | Per-profile |
+| 2.4 | `spending_categories` | Named budgets with rules | Per-profile |
 | 2.5 | `category_rules` | Immutable rule rows (new row per change, for Hedera audit trail) | Per-category |
 | 2.6 | `connection_keys` | API keys with optional expiry connecting external agents to profiles | Per-profile |
 | 2.7 | `transactions` | Purchase requests from agents + pipeline status | Per-user (via connection_key) |
@@ -176,7 +176,7 @@ The `detail` JSON column stores type-specific fields, keeping the table flat and
 | -------------- | ------------ | ------------------------------ | --------------------------------------------------- |
 | `id`           | UUID (str)   | PRIMARY KEY                    |                                                     |
 | `user_id`      | UUID (str)   | FK → users.id, NOT NULL        |                                                     |
-| `method_type`  | VARCHAR(20)  | NOT NULL                       | `CREDIT_CARD`, `DEBIT_CARD`, `BANK_ACCOUNT`, `CRYPTO_WALLET` |
+| `method_type`  | VARCHAR(20)  | NOT NULL                       | `CARD`, `BANK_ACCOUNT`, `CRYPTO_WALLET` |
 | `nickname`     | VARCHAR(100) | NOT NULL                       | User-facing label: "Work Visa Card"                 |
 | `detail`       | TEXT (JSON)  | NOT NULL, DEFAULT '{}'         | Type-specific data (see below)                      |
 | `is_default`   | BOOLEAN      | NOT NULL, DEFAULT FALSE        | User's default funding source                       |
@@ -189,7 +189,7 @@ The `detail` JSON column stores type-specific fields, keeping the table flat and
 
 **`detail` JSON by method_type:**
 
-For `CREDIT_CARD` / `DEBIT_CARD`:
+For `CARD` (credit or debit):
 ```json
 {
   "brand": "visa",
@@ -253,7 +253,6 @@ Exactly one category per profile must be `is_default=TRUE` — the fallback when
 | `profile_id`        | UUID (str)   | FK → profiles.id, NOT NULL           | Which profile this category belongs to               |
 | `name`              | VARCHAR(100) | NOT NULL                             | "Electronics", "Footwear", "Travel"                  |
 | `description`       | TEXT         | NULLABLE                             | Helps Gemini categorize: "Computers, phones, etc."    |
-| `keywords`          | TEXT (JSON)  | NULLABLE, DEFAULT '[]'               | JSON array: `["laptop", "phone", "headphones"]`       |
 | `payment_method_id` | UUID (str)   | FK → payment_methods.id, NULLABLE    | Preferred funding source. NULL = user default         |
 | `is_default`        | BOOLEAN      | NOT NULL, DEFAULT FALSE              | Fallback category. Exactly one per profile            |
 | `created_at`        | TIMESTAMP    | NOT NULL, DEFAULT NOW                |                                                      |
@@ -350,7 +349,8 @@ PENDING_EVALUATION
  └── HUMAN_NEEDED
       ├── HUMAN_APPROVED ──▶ COMPLETED
       │                 ──▶ EXPIRED
-      │                 ──▶ FAILED
+      │                 ──▶ 
+      
       ├── HUMAN_DENIED
       └── HUMAN_TIMEOUT
 ```
@@ -642,7 +642,7 @@ This 2-join chain happens once at the top of `/evaluate`. The resolved `user_id`
 1. **Validate connection key** → resolve to `profile_id` and `user_id`
 2. **Extract merchant domain** from `merchant_url` (e.g., `amazon.com`)
 3. **Create Transaction row** with `status=PENDING_EVALUATION`, store full request as `request_data` JSON, denormalize `user_id`
-4. **Load profile's spending categories** (all of them, with descriptions and keywords)
+4. **Load profile's spending categories** (all of them, with descriptions and rules)
 5. **Call Gemini** for category detection + risk evaluation (see Section 9 for prompt)
 6. **Create Evaluation row** with Gemini output (category_id, confidence, intent_match, reasoning)
 7. **Load rules** for the matched category
@@ -838,29 +838,17 @@ This 2-join chain happens once at the top of `/evaluate`. The resolved `user_id`
 }
 ```
 
-**Response (200):**
-```json
-{
-  "transaction_id": "txn_uuid",
-  "status": "HUMAN_APPROVED",
-  "virtual_card": {
-    "card_number": "4532789012348847",
-    "expiry_month": "03",
-    "expiry_year": "2026",
-    "cvv": "731",
-    "last_four": "8847",
-    "spend_limit": 332.35,
-    "merchant_lock": "marriott.com",
-    "expires_at": "2026-02-20T16:00:00Z"
-  }
-}
-```
+**Response: 204 No Content (empty body)**
+
+The virtual card is issued server-side and stored in the `virtual_cards` table.
+The shopping agent retrieves it via `GET /transactions/{id}/status` polling (returns full card when status is `HUMAN_APPROVED`).
+The dashboard does not need card details — 204 is sufficient confirmation the action succeeded.
 
 **Side effects:**
+- Issues virtual card (stored in `virtual_cards` table)
 - Updates HumanApproval: `value=APPROVE`, `responded_at=now`, `note=...`
 - Updates Transaction: `status=HUMAN_APPROVED`
-- Issues virtual card
-- Pushes WebSocket update
+- Broadcasts `TRANSACTION_DECIDED` via WebSocket
 
 ### 3.7 Endpoint: POST `/transactions/{transaction_id}/deny`
 
@@ -874,19 +862,12 @@ This 2-join chain happens once at the top of `/evaluate`. The resolved `user_id`
 }
 ```
 
-**Response (200):**
-```json
-{
-  "transaction_id": "txn_uuid",
-  "status": "HUMAN_DENIED",
-  "reason": "Denied by user: Too expensive, find something cheaper"
-}
-```
+**Response: 204 No Content (empty body)**
 
 **Side effects:**
 - Updates HumanApproval: `value=DENY`, `responded_at=now`, `note=...`
 - Updates Transaction: `status=HUMAN_DENIED`
-- Pushes WebSocket update
+- Broadcasts `TRANSACTION_DECIDED` via WebSocket
 
 ### 3.8 Endpoint: GET `/transactions`
 
@@ -945,12 +926,11 @@ This 2-join chain happens once at the top of `/evaluate`. The resolved `user_id`
       "id": "cat_uuid",
       "name": "Footwear",
       "description": "Shoes, sneakers, boots, sandals",
-      "keywords": ["shoes", "sneakers", "boots", "running shoes"],
       "is_default": false,
       "payment_method": {
         "id": "pm_uuid",
         "nickname": "Work Visa Card",
-        "method_type": "CREDIT_CARD"
+        "method_type": "CARD"
       },
       "rules": [
         {"id": "rule_uuid", "rule_type": "MAX_PER_TRANSACTION", "value": "150.00", "is_active": true},
@@ -977,7 +957,6 @@ This 2-join chain happens once at the top of `/evaluate`. The resolved `user_id`
   "profile_id": "profile_uuid",
   "name": "Travel",
   "description": "Flights, hotels, car rentals, travel accessories",
-  "keywords": ["flight", "hotel", "airbnb", "booking", "rental car"],
   "payment_method_id": "pm_uuid_or_null",
   "rules": [
     {"rule_type": "MAX_PER_TRANSACTION", "value": "2000.00"},
@@ -1069,7 +1048,7 @@ This 2-join chain happens once at the top of `/evaluate`. The resolved `user_id`
     {
       "id": "pm_uuid",
       "nickname": "Work Visa Card",
-      "method_type": "CREDIT_CARD",
+      "method_type": "CARD",
       "status": "active",
       "is_default": true,
       "detail": {
@@ -1091,7 +1070,7 @@ This 2-join chain happens once at the top of `/evaluate`. The resolved `user_id`
 **Request:**
 ```json
 {
-  "method_type": "CREDIT_CARD",
+  "method_type": "CARD",
   "nickname": "Work Visa Card",
   "is_default": true,
   "detail": {
@@ -1422,7 +1401,7 @@ runner = Runner(
 **Model:** Gemini 2.0 Flash — for evaluation (fast, free tier)
 **Called by:** Argus Core API during `/evaluate`
 
-**Error handling:** Retry once. If still fails, keyword-based fallback categorization with `category_confidence=0.5`.
+**Error handling:** Retry once. If still fails (or no API key configured), returns a mock stub response using the profile's default category with `category_confidence=0.90` — sufficient for local testing without a Gemini key.
 
 ### 7.2 Mock Card Issuer
 
@@ -1579,13 +1558,13 @@ If no custom rules are provided, return an empty array for custom_rule_results.
 [
   {
     "id": "pm_visa_001", "user_id": "usr_demo_001",
-    "method_type": "CREDIT_CARD", "nickname": "Work Visa Card",
+    "method_type": "CARD", "nickname": "Work Visa Card",
     "status": "active", "is_default": true,
     "detail": {"brand": "visa", "last4": "4242", "exp_month": 12, "exp_year": 2028}
   },
   {
     "id": "pm_amex_001", "user_id": "usr_demo_001",
-    "method_type": "CREDIT_CARD", "nickname": "Travel Amex Card",
+    "method_type": "CARD", "nickname": "Travel Amex Card",
     "status": "active", "is_default": false,
     "detail": {"brand": "amex", "last4": "1234", "exp_month": 6, "exp_year": 2027}
   }
@@ -1605,7 +1584,6 @@ If no custom rules are provided, return an empty array for custom_rule_results.
   {
     "id": "cat_footwear_001", "profile_id": "profile_demo_001",
     "name": "Footwear", "description": "Shoes, sneakers, boots, sandals, slippers",
-    "keywords": ["shoes", "sneakers", "boots", "running shoes", "sandals", "slippers"],
     "rules": [
       {"rule_type": "MAX_PER_TRANSACTION", "value": "200.00"},
       {"rule_type": "AUTO_APPROVE_UNDER", "value": "80.00"},
@@ -1616,7 +1594,6 @@ If no custom rules are provided, return an empty array for custom_rule_results.
   {
     "id": "cat_electronics_001", "profile_id": "profile_demo_001",
     "name": "Electronics", "description": "Computers, phones, tablets, gadgets, peripherals",
-    "keywords": ["laptop", "phone", "headphones", "charger", "tablet", "computer", "monitor"],
     "rules": [
       {"rule_type": "MAX_PER_TRANSACTION", "value": "500.00"},
       {"rule_type": "AUTO_APPROVE_UNDER", "value": "100.00"},
@@ -1626,7 +1603,6 @@ If no custom rules are provided, return an empty array for custom_rule_results.
   {
     "id": "cat_travel_001", "profile_id": "profile_demo_001",
     "name": "Travel", "description": "Flights, hotels, car rentals, Airbnb, luggage",
-    "keywords": ["flight", "hotel", "airbnb", "booking", "rental car", "luggage", "travel"],
     "rules": [
       {"rule_type": "MAX_PER_TRANSACTION", "value": "2000.00"},
       {"rule_type": "ALWAYS_REQUIRE_APPROVAL", "value": "true"},

@@ -1,11 +1,10 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 
 
 # --- Request ---
 
 class EvaluateMetadata(BaseModel):
-    """Optional metadata about the calling agent."""
     agent_framework: Optional[str] = None
     agent_name: Optional[str] = None
     session_id: Optional[str] = None
@@ -14,7 +13,7 @@ class EvaluateMetadata(BaseModel):
 class EvaluateRequest(BaseModel):
     """
     Request body for POST /evaluate.
-    Sent by the ADK plugin when the agent calls request_purchase.
+    Required: product_name, price, merchant_name, merchant_url
     """
     product_name: str
     product_url: Optional[str] = None
@@ -29,44 +28,33 @@ class EvaluateRequest(BaseModel):
 # --- Response sub-objects ---
 
 class CategoryInfo(BaseModel):
-    """Category detected by Gemini, included in every evaluate response."""
     id: str
     name: str
     confidence: float
 
 
-class RuleBreakdown(BaseModel):
-    """Spending breakdown for limit-type rules (daily, weekly, monthly)."""
-    previously_spent: float
-    this_transaction: float
-
-
 class RuleResult(BaseModel):
-    """
-    Result of a single rule check.
-    Every rule that was evaluated gets one of these in rules_applied.
-    """
+    """Result of a single rule check included in rules_applied."""
     rule_type: str
     threshold: Optional[float] = None
     actual: Optional[float] = None
-    breakdown: Optional[RuleBreakdown] = None
+    breakdown: Optional[dict] = None   # {"previously_spent": x, "this_transaction": y} for limit rules
     merchant_domain: Optional[str] = None
     passed: bool
     detail: str
 
 
 class AIEvaluation(BaseModel):
-    """Gemini's evaluation of the purchase request."""
-    category_name: str
-    category_confidence: float
-    intent_match: float
-    intent_summary: str
-    risk_flags: list[str]
-    reasoning: str
+    category_name: Optional[str] = None
+    category_confidence: Optional[float] = None
+    intent_match: Optional[float] = None
+    intent_summary: Optional[str] = None
+    risk_flags: List[str] = []
+    reasoning: Optional[str] = None
 
 
 class VirtualCardResponse(BaseModel):
-    """Virtual card details, only present when decision is APPROVE."""
+    """Returned only when decision is APPROVE."""
     card_number: str
     expiry_month: str
     expiry_year: str
@@ -77,28 +65,20 @@ class VirtualCardResponse(BaseModel):
     expires_at: str  # ISO format
 
 
-class ApprovalInfo(BaseModel):
-    """Approval URLs, only present when decision is REQUIRE_APPROVAL."""
-    timeout_seconds: int
-    poll_url: str
-    approve_url: str
-    deny_url: str
-
-
 # --- Main response ---
 
 class EvaluateResponse(BaseModel):
     """
     Response from POST /evaluate.
-    Always includes transaction_id, decision, reason, category, rules_applied, ai_evaluation.
-    virtual_card is only present when decision is APPROVE.
-    approval is only present when decision is REQUIRE_APPROVAL.
+    decision: "APPROVE" | "DENY" | "HUMAN_NEEDED"
+    virtual_card: present only when APPROVE
+    timeout_seconds: present only when HUMAN_NEEDED
     """
     transaction_id: str
-    decision: str  # "APPROVE", "DENY", or "REQUIRE_APPROVAL"
+    decision: str
     reason: str
-    category: CategoryInfo
-    rules_applied: list[RuleResult]
-    ai_evaluation: AIEvaluation
+    category: Optional[CategoryInfo] = None
+    rules_applied: List[RuleResult] = []
+    ai_evaluation: Optional[AIEvaluation] = None
     virtual_card: Optional[VirtualCardResponse] = None
-    approval: Optional[ApprovalInfo] = None
+    timeout_seconds: Optional[int] = None  # only when HUMAN_NEEDED

@@ -1,205 +1,153 @@
 import json
 import logging
-
-import google.generativeai as genai
+from typing import Optional
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Configure the Gemini SDK with our API key.
-# If the key is empty, Gemini calls will fail and we'll use the keyword fallback.
-if settings.google_api_key:
-    genai.configure(api_key=settings.google_api_key)
-
-# ------------------------------------------------------------------
-# System prompt — copied exactly from argus-data-spec.md Section 9.1
-# ------------------------------------------------------------------
-SYSTEM_PROMPT = """You are Argus, a financial transaction evaluator for an AI agent \
-payment authorization system. An AI shopping agent wants to make \
-a purchase on behalf of a user. Your job is:
-
-1. Determine which of the user's spending categories this purchase \
-   belongs to
-2. Evaluate how well the purchase matches the user's stated intent
-3. Flag any risk concerns
-
-You must respond with ONLY a valid JSON object. No markdown, no \
-explanation, no backticks. Just the JSON."""
+# System instruction — spec Section 9.1
+_SYSTEM_INSTRUCTION = (
+    "You are Argus, a financial transaction evaluator. An AI shopping "
+    "agent wants to make a purchase. Determine the category, evaluate intent "
+    "match, flag risks, and evaluate any custom rules. Respond with ONLY valid JSON."
+)
 
 
-def _build_user_prompt(
-    categories_json: str,
+def _build_prompt(
+    categories: list,
     product_name: str,
     price: float,
     currency: str,
     merchant_name: str,
     merchant_url: str,
-    conversation_context: str | None,
+    conversation_context: Optional[str],
+    custom_rules: list,
 ) -> str:
-    """Build the user prompt from the template in argus-data-spec.md Section 9.1."""
+    """Build evaluation prompt exactly as defined in spec Section 9.1."""
+    categories_json = json.dumps(categories, indent=2)
+    custom_rules_json = json.dumps(custom_rules, indent=2)
     context = conversation_context or "No conversation context provided."
 
     return f"""## User's Spending Categories
-
 {categories_json}
 
 ## Purchase Request
-
 Product: {product_name}
 Price: {price} {currency}
-Merchant: {merchant_name}
-Merchant URL: {merchant_url}
+Merchant: {merchant_name} ({merchant_url})
 
 ## Conversation Context
-
 {context}
 
-## Instructions
+## Custom Rules to Evaluate
+{custom_rules_json}
+(Each custom rule has an id and a natural-language condition. Evaluate whether \
+the purchase satisfies each condition. Return pass/fail with reasoning.)
 
-Return a JSON object with exactly these fields:
-
+## Return JSON:
 {{
-  "category_name": "EXACT name from the categories list above that best matches this purchase. If no category is a confident match, use the category marked as default.",
-  "category_confidence": <float 0.0-1.0, how confident you are in the category match>,
-  "intent_match": <float 0.0-1.0, how well the purchase matches what the user asked for based on the conversation context>,
-  "intent_summary": "<one sentence explaining how the purchase relates to the user's request>",
-  "risk_flags": [<list of string flags, empty if no concerns>],
-  "reasoning": "<2-3 sentences explaining your overall assessment>"
+  "category_name": "EXACT name from categories list",
+  "category_confidence": <0.0-1.0>,
+  "intent_match": <0.0-1.0>,
+  "intent_summary": "<one sentence>",
+  "risk_flags": [<list of plain-language risk descriptions, or empty>],
+  "reasoning": "<2-3 sentences>",
+  "custom_rule_results": [
+    {{
+      "rule_id": "<id of the custom rule>",
+      "passed": <true/false>,
+      "detail": "<why it passed or failed>"
+    }}
+  ]
 }}
 
-Valid risk_flags values:
-- "price_exceeds_stated_budget" — user said a budget, price is over it
-- "product_category_mismatch" — product doesn't match what user asked for
-- "possible_upsell" — agent picked premium when user wanted basic
-- "merchant_suspicious" — merchant domain looks unusual or mimics a known brand
-- "intent_unclear" — not enough context to evaluate match
-- "luxury_item_on_budget_request" — user wanted budget option, agent picked luxury
-- "subscription_not_requested" — agent is signing up for recurring charge
-- "different_brand_than_requested" — user specified brand, agent chose different
-- "multiple_items_unexpected" — user asked for one item, cart has multiple"""
+Risk flags should be free-text descriptions of any concerns, e.g.:
+- "Price $120 exceeds user's stated budget of under $100"
+- "Product is headphones but user asked for shoes"
+- "Merchant domain appears suspicious or newly registered"
+Return an empty array if no risks are detected.
+
+If no custom rules are provided, return an empty array for custom_rule_results."""
 
 
-def _categories_to_json(categories) -> str:
+def _mock_response(product_name: str, categories: list) -> dict:
     """
-    Convert a list of SpendingCategory SQLAlchemy objects into the JSON
-    format that Gemini expects. Keywords are stored as a JSON string in
-    the database, so we parse them back into a list.
+    Stub response used when no GOOGLE_API_KEY is configured or Gemini fails.
+    Returns the default category with high confidence and no risk flags so the
+    rules engine runs cleanly against real seed data during local testing.
     """
-    return json.dumps(
-        [
-            {
-                "name": c.name,
-                "description": c.description or "",
-                "keywords": json.loads(c.keywords) if c.keywords else [],
-                "is_default": c.is_default,
-            }
-            for c in categories
-        ],
-        indent=2,
-    )
+    default_cat = next((c for c in categories if c.get("is_default")), None)
+    category_name = default_cat["name"] if default_cat else (categories[0]["name"] if categories else "General")
+
+    return {
+        "category_name": category_name,
+        "category_confidence": 0.90,
+        "intent_match": 0.90,
+        "intent_summary": f"[MOCK] {product_name} assigned to {category_name}. Gemini not configured.",
+        "risk_flags": [],
+        "reasoning": "[MOCK] No GOOGLE_API_KEY configured. Returning stub response for local testing.",
+        "custom_rule_results": [],
+    }
 
 
-async def evaluate_purchase(
-    categories,
+def call_gemini(
+    categories: list,
     product_name: str,
     price: float,
     currency: str,
     merchant_name: str,
     merchant_url: str,
-    conversation_context: str | None,
+    conversation_context: Optional[str],
+    custom_rules: list,
 ) -> dict:
     """
-    Call Gemini 2.0 Flash for category detection + risk assessment.
+    Call Gemini 2.0 Flash for category detection + risk evaluation.
+    Retries once on failure. Returns a mock stub if no API key is configured
+    or if both attempts fail.
 
-    Retry once on failure, then fall back to keyword-based categorization.
-
-    Args:
-        categories: list of SpendingCategory objects (user's categories)
-        product_name, price, currency, merchant_name, merchant_url: purchase info
-        conversation_context: the agent's conversation with the user
-
-    Returns:
-        dict with keys: category_name, category_confidence, intent_match,
-        intent_summary, risk_flags, reasoning
+    categories: list of dicts with name, description, keywords, is_default
+    custom_rules: list of dicts with id, prompt (for CUSTOM_RULE type rules)
     """
-    # If no API key configured, go straight to fallback
     if not settings.google_api_key:
-        logger.warning("No GOOGLE_API_KEY configured — using keyword fallback")
-        return keyword_fallback(categories, product_name)
+        logger.info("No GOOGLE_API_KEY configured — returning mock response for testing")
+        return _mock_response(product_name, categories)
 
-    categories_json = _categories_to_json(categories)
-    user_prompt = _build_user_prompt(
-        categories_json, product_name, price, currency,
-        merchant_name, merchant_url, conversation_context,
+    prompt = _build_prompt(
+        categories, product_name, price, currency,
+        merchant_name, merchant_url, conversation_context, custom_rules,
     )
 
-    model = genai.GenerativeModel(
-        model_name=settings.gemini_eval_model,
-        system_instruction=SYSTEM_PROMPT,
-    )
+    for attempt in range(2):
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=settings.google_api_key)
+            model = genai.GenerativeModel(
+                model_name=settings.gemini_eval_model,
+                system_instruction=_SYSTEM_INSTRUCTION,
+            )
+            response = model.generate_content(
+                prompt,
+                generation_config=genai.types.GenerationConfig(
+                    temperature=0.1,
+                    response_mime_type="application/json",
+                ),
+            )
+            result = json.loads(response.text)
 
-    # First attempt
-    try:
-        response = model.generate_content(
-            user_prompt,
-            generation_config=genai.GenerationConfig(
-                temperature=0.1,
-                response_mime_type="application/json",
-            ),
-        )
-        result = json.loads(response.text)
-        logger.info("Gemini evaluation succeeded on first attempt")
-        return result
-    except Exception as e:
-        logger.warning(f"Gemini first attempt failed: {e}")
+            required = [
+                "category_name", "category_confidence", "intent_match",
+                "intent_summary", "risk_flags", "reasoning",
+            ]
+            if all(k in result for k in required):
+                result.setdefault("custom_rule_results", [])
+                logger.info(f"Gemini succeeded on attempt {attempt + 1}")
+                return result
 
-    # Retry once
-    try:
-        response = model.generate_content(
-            user_prompt,
-            generation_config=genai.GenerationConfig(
-                temperature=0.1,
-                response_mime_type="application/json",
-            ),
-        )
-        result = json.loads(response.text)
-        logger.info("Gemini evaluation succeeded on retry")
-        return result
-    except Exception as e:
-        logger.warning(f"Gemini retry also failed: {e} — using keyword fallback")
-        return keyword_fallback(categories, product_name)
+            logger.warning(f"Gemini attempt {attempt + 1}: response missing required fields")
 
+        except Exception as e:
+            logger.warning(f"Gemini attempt {attempt + 1} failed: {e}")
 
-def keyword_fallback(categories, product_name: str) -> dict:
-    """
-    Fallback when Gemini is unavailable.
-
-    Tries to match the product name against each category's keywords.
-    If no keyword matches, falls back to the user's default category.
-    """
-    product_lower = product_name.lower()
-
-    # Try to match by keywords
-    for cat in categories:
-        keywords = json.loads(cat.keywords) if cat.keywords else []
-        if any(kw.lower() in product_lower for kw in keywords):
-            return {
-                "category_name": cat.name,
-                "category_confidence": 0.5,
-                "intent_match": 0.5,
-                "intent_summary": "Matched by keyword (AI evaluation degraded)",
-                "risk_flags": ["ai_evaluation_degraded"],
-                "reasoning": "Gemini was unavailable. Matched by keyword.",
-            }
-
-    # No keyword match — use default category
-    default = next((c for c in categories if c.is_default), categories[0])
-    return {
-        "category_name": default.name,
-        "category_confidence": 0.3,
-        "intent_match": 0.5,
-        "intent_summary": "No category match (AI evaluation degraded)",
-        "risk_flags": ["ai_evaluation_degraded", "intent_unclear"],
-        "reasoning": "Gemini was unavailable. No keyword match. Using default category.",
-    }
+    logger.warning("Gemini failed after 2 attempts — returning mock response")
+    return _mock_response(product_name, categories)

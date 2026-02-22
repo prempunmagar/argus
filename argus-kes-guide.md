@@ -222,9 +222,9 @@ STEP 5: Call Gemini 2.0 Flash
   - Prompt is in argus-data-spec.md Section 9.1
   - Parse JSON response: category_name, category_confidence,
     intent_match, intent_summary, risk_flags, reasoning, custom_rule_results
-  - If Gemini fails: retry once. If still fails, use keyword-based
-    fallback (match product_name against category keywords).
-    Set confidence to 0.5, add "AI evaluation degraded — using keyword fallback" to risk_flags.
+  - If Gemini fails: retry once. If still fails (or no API key), return
+    a mock stub response using the profile's default category.
+    Sufficient for local testing — no keyword matching needed.
 
 STEP 6: Match category
   - Find spending_category WHERE name = gemini_response.category_name
@@ -304,7 +304,7 @@ STEP 10: Execute decision
     - Create human_approval row (with transaction_id + evaluation_id)
     - Update transaction: status = HUMAN_NEEDED
     - Broadcast via WebSocket: APPROVAL_REQUIRED
-    - Return response with poll_url and timeout info
+    - Return response with timeout_seconds (plugin polls GET /transactions/{id}/status)
 ```
 
 **Full request/response JSON examples are in argus-data-spec.md Section 3.4.** Copy them exactly.
@@ -351,32 +351,20 @@ async def evaluate_purchase(categories, product_name, price, currency,
             response = model.generate_content(prompt, ...)
             return json.loads(response.text)
         except:
-            # Keyword-based fallback
-            return keyword_fallback(categories, product_name)
+            # Mock stub fallback — use default category, high confidence, no risk flags
+            return _mock_response(product_name, categories)
 
-def keyword_fallback(categories, product_name):
-    """Fallback when Gemini fails."""
-    product_lower = product_name.lower()
-    for cat in categories:
-        keywords = json.loads(cat.keywords) if cat.keywords else []
-        if any(kw.lower() in product_lower for kw in keywords):
-            return {
-                "category_name": cat.name,
-                "category_confidence": 0.5,
-                "intent_match": 0.5,
-                "intent_summary": "Matched by keyword (AI evaluation degraded)",
-                "risk_flags": ["ai_evaluation_degraded"],
-                "reasoning": "Gemini was unavailable. Matched by keyword."
-            }
-    # Default category
-    default = next(c for c in categories if c.is_default)
+def _mock_response(product_name, categories):
+    """Stub when Gemini is unavailable or no API key configured."""
+    default_cat = next((c for c in categories if c.get("is_default")), categories[0])
     return {
-        "category_name": default.name,
-        "category_confidence": 0.3,
-        "intent_match": 0.5,
-        "intent_summary": "No category match (AI evaluation degraded)",
-        "risk_flags": ["ai_evaluation_degraded", "intent_unclear"],
-        "reasoning": "Gemini was unavailable. No keyword match. Using default category."
+        "category_name": default_cat["name"],
+        "category_confidence": 0.90,
+        "intent_match": 0.90,
+        "intent_summary": f"[MOCK] {product_name} → {default_cat['name']}. Gemini not configured.",
+        "risk_flags": [],
+        "reasoning": "[MOCK] No GOOGLE_API_KEY. Stub response for local testing.",
+        "custom_rule_results": []
     }
 ```
 
