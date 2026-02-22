@@ -8,8 +8,6 @@ import { useTransactions } from "@/hooks/useTransactions"
 import type { Transaction } from "@/lib/types"
 import { api } from "@/lib/api"
 
-const USE_MOCK = !import.meta.env.VITE_API_URL
-
 interface Props {
   transaction: Transaction
 }
@@ -21,24 +19,20 @@ export function TransactionCard({ transaction: t }: Props) {
   const handleApprove = async (e: React.MouseEvent) => {
     e.stopPropagation()
     try {
-      await api.post(`/transactions/${t.id}/approve`)
-    } catch {
-      // mock mode
-    }
-    if (USE_MOCK) {
+      await api.post(`/transactions/${t.id}/respond`, { action: "APPROVE" })
       updateTransaction(t.id, { status: "HUMAN_APPROVED" })
+    } catch {
+      // handle error
     }
   }
 
   const handleDeny = async (e: React.MouseEvent) => {
     e.stopPropagation()
     try {
-      await api.post(`/transactions/${t.id}/deny`)
-    } catch {
-      // mock mode
-    }
-    if (USE_MOCK) {
+      await api.post(`/transactions/${t.id}/respond`, { action: "DENY" })
       updateTransaction(t.id, { status: "HUMAN_DENIED" })
+    } catch {
+      // handle error
     }
   }
 

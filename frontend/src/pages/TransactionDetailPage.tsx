@@ -20,10 +20,7 @@ import { StatusBadge } from "@/components/transactions/StatusBadge"
 import { useTransactions } from "@/hooks/useTransactions"
 import { formatCurrency } from "@/lib/utils"
 import { api } from "@/lib/api"
-import { mockTransactionDetail } from "@/lib/mock-data"
 import type { TransactionDetail } from "@/lib/types"
-
-const USE_MOCK = !import.meta.env.VITE_API_URL
 
 function toTitleCase(str: string): string {
   return str
@@ -42,14 +39,10 @@ export function TransactionDetailPage() {
   useEffect(() => {
     async function load() {
       try {
-        if (USE_MOCK) {
-          setTxn({ ...mockTransactionDetail, id: id! })
-        } else {
-          const { data } = await api.get(`/transactions/${id}`)
-          setTxn(data)
-        }
+        const { data } = await api.get(`/transactions/${id}`)
+        setTxn(data)
       } catch {
-        setTxn({ ...mockTransactionDetail, id: id! })
+        setTxn(null)
       } finally {
         setLoading(false)
       }
@@ -60,27 +53,23 @@ export function TransactionDetailPage() {
   async function handleApprove() {
     if (!txn) return
     try {
-      await api.post(`/transactions/${txn.id}/approve`)
-    } catch {
-      // mock mode
-    }
-    if (USE_MOCK) {
+      await api.post(`/transactions/${txn.id}/respond`, { action: "APPROVE" })
       updateTransaction(txn.id, { status: "HUMAN_APPROVED" })
+      setTxn((prev) => prev ? { ...prev, status: "HUMAN_APPROVED" } : prev)
+    } catch {
+      // handle error
     }
-    setTxn((prev) => prev ? { ...prev, status: "HUMAN_APPROVED" } : prev)
   }
 
   async function handleDeny() {
     if (!txn) return
     try {
-      await api.post(`/transactions/${txn.id}/deny`)
-    } catch {
-      // mock mode
-    }
-    if (USE_MOCK) {
+      await api.post(`/transactions/${txn.id}/respond`, { action: "DENY" })
       updateTransaction(txn.id, { status: "HUMAN_DENIED" })
+      setTxn((prev) => prev ? { ...prev, status: "HUMAN_DENIED" } : prev)
+    } catch {
+      // handle error
     }
-    setTxn((prev) => prev ? { ...prev, status: "HUMAN_DENIED" } : prev)
   }
 
   if (loading) {

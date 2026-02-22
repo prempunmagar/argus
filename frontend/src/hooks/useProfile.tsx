@@ -7,10 +7,8 @@ import {
   type ReactNode,
 } from "react"
 import { api } from "@/lib/api"
-import { mockProfiles } from "@/lib/mock-data"
 import type { Profile } from "@/lib/types"
 
-const USE_MOCK = !import.meta.env.VITE_API_URL
 const STORAGE_KEY = "argus_current_profile"
 
 interface ProfileContextValue {
@@ -31,21 +29,16 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function load() {
       try {
-        let loaded: Profile[]
-        if (USE_MOCK) {
-          loaded = mockProfiles
-        } else {
-          const { data } = await api.get("/profiles")
-          loaded = data.profiles ?? data
-        }
+        const { data } = await api.get("/profiles")
+        const loaded: Profile[] = data.profiles ?? data
         setProfiles(loaded)
 
         const savedId = localStorage.getItem(STORAGE_KEY)
         const saved = loaded.find((p) => p.id === savedId)
         setCurrentProfile(saved ?? loaded[0] ?? null)
       } catch {
-        setProfiles(mockProfiles)
-        setCurrentProfile(mockProfiles[0] ?? null)
+        setProfiles([])
+        setCurrentProfile(null)
       } finally {
         setLoading(false)
       }
@@ -66,29 +59,16 @@ export function ProfileProvider({ children }: { children: ReactNode }) {
 
   const createProfile = useCallback(
     (name: string, description?: string) => {
-      if (USE_MOCK) {
-        const newProfile: Profile = {
-          id: `profile-${Date.now()}`,
-          name,
-          description: description ?? undefined,
-          is_active: true,
-          created_at: new Date().toISOString(),
-        }
-        setProfiles((prev) => [...prev, newProfile])
-        setCurrentProfile(newProfile)
-        localStorage.setItem(STORAGE_KEY, newProfile.id)
-      } else {
-        api
-          .post("/profiles", { name, description })
-          .then(({ data }) => {
-            setProfiles((prev) => [...prev, data])
-            setCurrentProfile(data)
-            localStorage.setItem(STORAGE_KEY, data.id)
-          })
-          .catch(() => {
-            // fallback
-          })
-      }
+      api
+        .post("/profiles", { name, description })
+        .then(({ data }) => {
+          setProfiles((prev) => [...prev, data])
+          setCurrentProfile(data)
+          localStorage.setItem(STORAGE_KEY, data.id)
+        })
+        .catch(() => {
+          // handle error
+        })
     },
     []
   )

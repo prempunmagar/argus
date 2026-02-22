@@ -9,11 +9,8 @@ import {
   type CategoryFormData,
 } from "@/components/categories/CategoryFormDialog"
 import { api } from "@/lib/api"
-import { mockCategories, mockPaymentMethods } from "@/lib/mock-data"
 import { useProfile } from "@/hooks/useProfile"
 import type { SpendingCategory, PaymentMethod } from "@/lib/types"
-
-const USE_MOCK = !import.meta.env.VITE_API_URL
 
 export function CategoriesPage() {
   const { currentProfile } = useProfile()
@@ -28,21 +25,16 @@ export function CategoriesPage() {
   useEffect(() => {
     async function load() {
       try {
-        if (USE_MOCK) {
-          setCategories(mockCategories)
-          setPaymentMethods(mockPaymentMethods)
-        } else {
-          const profileParam = currentProfile ? `?profile_id=${currentProfile.id}` : ""
-          const [catRes, pmRes] = await Promise.all([
-            api.get(`/categories${profileParam}`),
-            api.get("/payment-methods").catch(() => ({ data: { payment_methods: [] } })),
-          ])
-          setCategories(catRes.data.categories)
-          setPaymentMethods(pmRes.data.payment_methods ?? pmRes.data ?? [])
-        }
+        const profileParam = currentProfile ? `?profile_id=${currentProfile.id}` : ""
+        const [catRes, pmRes] = await Promise.all([
+          api.get(`/categories${profileParam}`),
+          api.get("/payment-methods").catch(() => ({ data: { payment_methods: [] } })),
+        ])
+        setCategories(catRes.data.categories)
+        setPaymentMethods(pmRes.data.payment_methods ?? pmRes.data ?? [])
       } catch {
-        setCategories(mockCategories)
-        setPaymentMethods(mockPaymentMethods)
+        setCategories([])
+        setPaymentMethods([])
       } finally {
         setLoading(false)
       }
@@ -62,64 +54,19 @@ export function CategoriesPage() {
 
   async function handleSave(data: CategoryFormData) {
     try {
-      if (USE_MOCK) {
-        if (editingCategory) {
-          // Update existing in local state
-          const selectedPm = paymentMethods.find((pm) => pm.id === data.payment_method_id) ?? null
-          setCategories((prev) =>
-            prev.map((c) =>
-              c.id === editingCategory.id
-                ? {
-                    ...c,
-                    name: data.name,
-                    description: data.description,
-                    payment_method: selectedPm ? { id: selectedPm.id, nickname: selectedPm.nickname, method_type: selectedPm.method_type } : undefined,
-                    rules: data.rules.map((r, i) => ({
-                      id: `rule-${Date.now()}-${i}`,
-                      is_active: true,
-                      ...r,
-                    })),
-                  }
-                : c
-            )
-          )
-          toast.success("Category updated")
-        } else {
-          // Create new in local state
-          const selectedPmCreate = paymentMethods.find((pm) => pm.id === data.payment_method_id) ?? null
-          const newCategory: SpendingCategory = {
-            id: `cat-${Date.now()}`,
-            name: data.name,
-            description: data.description,
-            is_default: false,
-            payment_method: selectedPmCreate ? { id: selectedPmCreate.id, nickname: selectedPmCreate.nickname, method_type: selectedPmCreate.method_type } : undefined,
-            rules: data.rules.map((r, i) => ({
-              id: `rule-${Date.now()}-${i}`,
-              is_active: true,
-              ...r,
-            })),
-            spending_today: 0,
-            spending_this_week: 0,
-            spending_this_month: 0,
-          }
-          setCategories((prev) => [...prev, newCategory])
-          toast.success("Category created")
-        }
+      if (editingCategory) {
+        const { data: updated } = await api.put(
+          `/categories/${editingCategory.id}`,
+          data
+        )
+        setCategories((prev) =>
+          prev.map((c) => (c.id === editingCategory.id ? updated : c))
+        )
+        toast.success("Category updated")
       } else {
-        if (editingCategory) {
-          const { data: updated } = await api.put(
-            `/categories/${editingCategory.id}`,
-            data
-          )
-          setCategories((prev) =>
-            prev.map((c) => (c.id === editingCategory.id ? updated : c))
-          )
-          toast.success("Category updated")
-        } else {
-          const { data: created } = await api.post("/categories", data)
-          setCategories((prev) => [...prev, created])
-          toast.success("Category created")
-        }
+        const { data: created } = await api.post("/categories", data)
+        setCategories((prev) => [...prev, created])
+        toast.success("Category created")
       }
       setDialogOpen(false)
     } catch {
