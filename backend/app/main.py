@@ -93,23 +93,23 @@ async def websocket_dashboard(
 def debug_env():
     import os
     api_key = settings.google_api_key
+    gemini_test = {"status": "skipped"}
+    if api_key:
+        try:
+            import google.generativeai as genai
+            genai.configure(api_key=api_key)
+            model = genai.GenerativeModel(model_name=settings.gemini_eval_model)
+            response = model.generate_content("Say hello in exactly 3 words.")
+            gemini_test = {"status": "ok", "response": response.text[:100]}
+        except Exception as e:
+            gemini_test = {"status": "error", "error": str(e), "type": type(e).__name__}
     return {
         "settings_resolved": {
-            "database_url": settings.database_url,
-            "cors_origins": settings.cors_origins,
-            "jwt_secret": settings.jwt_secret[:8] + "..." if settings.jwt_secret else "(empty)",
             "google_api_key": f"{api_key[:8]}...{api_key[-4:]}" if len(api_key) > 12 else f"(empty or short: '{api_key}')",
             "gemini_eval_model": settings.gemini_eval_model,
-            "use_mock_cards": settings.use_mock_cards,
+            "cors_origins": settings.cors_origins,
         },
-        "raw_env_vars": {
-            "ARGUS_DATABASE_URL": os.environ.get("ARGUS_DATABASE_URL", "(NOT SET)"),
-            "ARGUS_CORS_ORIGINS": os.environ.get("ARGUS_CORS_ORIGINS", "(NOT SET)"),
-            "ARGUS_JWT_SECRET": os.environ.get("ARGUS_JWT_SECRET", "(NOT SET)")[:8] + "..." if os.environ.get("ARGUS_JWT_SECRET") else "(NOT SET)",
-            "ARGUS_GOOGLE_API_KEY": f"{os.environ.get('ARGUS_GOOGLE_API_KEY', '')[:8]}..." if os.environ.get("ARGUS_GOOGLE_API_KEY") else "(NOT SET)",
-            "ARGUS_GEMINI_EVAL_MODEL": os.environ.get("ARGUS_GEMINI_EVAL_MODEL", "(NOT SET)"),
-            "ARGUS_USE_MOCK_CARDS": os.environ.get("ARGUS_USE_MOCK_CARDS", "(NOT SET)"),
-        },
+        "gemini_test": gemini_test,
     }
 
 
