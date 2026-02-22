@@ -2,13 +2,6 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install Java (required for hedera-sdk-py / pyjnius)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    openjdk-21-jre-headless \
-    && rm -rf /var/lib/apt/lists/*
-
-ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
-
 # Install dependencies first (better layer caching)
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
