@@ -542,3 +542,27 @@ async def respond_to_transaction(
         virtual_card=virtual_card_detail,
         hedera_tx_id=approval.hedera_tx_id if approval else None,
     )
+
+
+# --- Admin: Delete non-seed transactions (for demo retakes) ---
+@router.delete("/transactions/non-seed", tags=["admin"])
+def delete_non_seed_transactions(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete all transactions that aren't seed data (txn_demo_* / txn_ent_*)."""
+    non_seed = db.query(Transaction).filter(
+        ~Transaction.id.like("txn_demo_%"),
+        ~Transaction.id.like("txn_ent_%"),
+        Transaction.user_id == current_user.id,
+    ).all()
+
+    count = len(non_seed)
+    for txn in non_seed:
+        db.query(VirtualCard).filter(VirtualCard.transaction_id == txn.id).delete()
+        db.query(HumanApproval).filter(HumanApproval.transaction_id == txn.id).delete()
+        db.query(Evaluation).filter(Evaluation.transaction_id == txn.id).delete()
+        db.delete(txn)
+
+    db.commit()
+    return {"deleted": count, "user_id": current_user.id}
