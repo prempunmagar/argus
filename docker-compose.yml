@@ -7,13 +7,6 @@ services:
       - "8000:8000"
     volumes:
       - argus-data:/data
-    environment:
-      - ARGUS_JWT_SECRET=${ARGUS_JWT_SECRET:-changeme}
-      - ARGUS_JWT_EXPIRY_HOURS=${ARGUS_JWT_EXPIRY_HOURS:-24}
-      - ARGUS_GOOGLE_API_KEY=${ARGUS_GOOGLE_API_KEY:-}
-      - ARGUS_GEMINI_EVAL_MODEL=${ARGUS_GEMINI_EVAL_MODEL:-gemini-2.5-flash}
-      - ARGUS_USE_MOCK_CARDS=${ARGUS_USE_MOCK_CARDS:-true}
-      - ARGUS_CORS_ORIGINS=${ARGUS_CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
     restart: unless-stopped
 
 volumes:
