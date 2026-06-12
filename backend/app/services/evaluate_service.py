@@ -188,7 +188,6 @@ async def run_evaluate_pipeline(
         db.commit()
         db.refresh(bad_url_transaction)
 
-        from app.schemas.evaluate import AIEvaluation, CategoryInfo, EvaluateResponse
         return EvaluateResponse(
             transaction_id=bad_url_transaction.id,
             decision="DENY",
