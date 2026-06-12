@@ -13,6 +13,8 @@ import json
 import logging
 from urllib.parse import urlparse
 
+import httpx
+
 from sqlalchemy.orm import Session
 from app.services import hedera_service
 
@@ -42,6 +44,15 @@ logger = logging.getLogger(__name__)
 _HUMAN_APPROVAL_TIMEOUT = 300  # seconds
 
 
+_OBVIOUSLY_FAKE_DOMAINS = {
+    "example.com", "example.org", "test.com", "fake.com",
+    "placeholder.com", "domain.com", "yoursite.com", "website.com",
+    "shop.com", "store.com", "merchant.com", "product.com",
+}
+
+_OBVIOUSLY_FAKE_PATHS = {"placeholder", "product", "item", "listing", "buy"}
+
+
 def _extract_domain(url: str) -> str:
     """Extract bare domain from a URL (strips www. prefix)."""
     try:
@@ -52,6 +63,71 @@ def _extract_domain(url: str) -> str:
         return domain.lower()
     except Exception:
         return url
+
+
+def _validate_url(url: str, field_name: str) -> str | None:
+    """
+    Validate that a URL is well-formed and not an obvious placeholder.
+
+    Returns None if valid, or a denial reason string if invalid.
+    """
+    if not url:
+        return f"{field_name} is missing — cannot verify merchant."
+
+    try:
+        parsed = urlparse(url)
+    except Exception:
+        return f"{field_name} could not be parsed: {url!r}"
+
+    # Must have http or https scheme
+    if parsed.scheme not in ("http", "https"):
+        return (
+            f"{field_name} has no valid scheme (got {parsed.scheme!r}). "
+            "URL must start with http:// or https://"
+        )
+
+    # Must have a host
+    domain = (parsed.netloc or "").lower().lstrip("www.")
+    if not domain:
+        return f"{field_name} has no domain: {url!r}"
+
+    # Block obviously fake/placeholder domains
+    if domain in _OBVIOUSLY_FAKE_DOMAINS:
+        return (
+            f"{field_name} points to a placeholder domain ({domain}). "
+            "This looks like a hallucinated URL — real merchant URL required."
+        )
+
+    # Block bare single-word paths (no TLD means not a real domain)
+    if "." not in domain:
+        return (
+            f"{field_name} domain {domain!r} has no TLD — not a valid URL."
+        )
+
+    return None  # valid
+
+
+async def _check_url_reachable(url: str) -> str | None:
+    """
+    Do a live HEAD request to verify the URL actually exists.
+    Returns None if reachable (2xx/3xx), or a denial reason string on 404/error.
+    Times out after 5 seconds so it doesn't stall the pipeline.
+    """
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=5.0) as client:
+            resp = await client.head(url)
+            if resp.status_code == 404:
+                return f"merchant_url returned 404 Not Found ({url}). Product page does not exist."
+            # Any other response (200, 301, 403, 429...) means the page exists
+            return None
+    except httpx.TimeoutException:
+        # Timeout — don't block the purchase, just log and allow
+        logger.warning(f"URL reachability check timed out for {url} — allowing")
+        return None
+    except Exception as e:
+        # Network error — don't block, just log
+        logger.warning(f"URL reachability check failed for {url}: {e} — allowing")
+        return None
 
 
 def _build_reason(decision: str, checks: list, category_name: str, ai_reasoning: str = None) -> str:
@@ -95,8 +171,42 @@ async def run_evaluate_pipeline(
 
     # ── Phase 1: Validation + Setup ──────────────────────────────────────────
 
-    # Step 2: Extract merchant domain
+    # Step 2: Extract merchant domain + validate URLs
     merchant_domain = _extract_domain(product.merchant_url)
+
+    url_error = _validate_url(product.merchant_url, "merchant_url") or await _check_url_reachable(product.merchant_url)
+    if url_error:
+        logger.warning(f"URL validation failed: {url_error}")
+        # Create a minimal transaction row for audit purposes, then deny
+        bad_url_transaction = Transaction(
+            user_id=user_id,
+            connection_key_id=connection_key_id,
+            status="AI_DENIED",
+            request_data=json.dumps(request.model_dump()),
+        )
+        db.add(bad_url_transaction)
+        db.commit()
+        db.refresh(bad_url_transaction)
+
+        from app.schemas.evaluate import AIEvaluation, CategoryInfo, EvaluateResponse
+        return EvaluateResponse(
+            transaction_id=bad_url_transaction.id,
+            decision="DENY",
+            reason=f"Invalid URL: {url_error}",
+            category=CategoryInfo(id="", name="Unknown", confidence=0.0),
+            rules_applied=[],
+            ai_evaluation=AIEvaluation(
+                category_name="Unknown",
+                category_confidence=0.0,
+                intent_match=0.0,
+                intent_summary="",
+                risk_flags=["invalid_merchant_url"],
+                reasoning=url_error,
+            ),
+            virtual_card=None,
+            timeout_seconds=None,
+            hedera_tx_id=None,
+        )
 
     # Step 3: Create Transaction row
     request_data = json.dumps(request.model_dump())

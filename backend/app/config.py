@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///argus.db"
 
     # JWT
-    jwt_secret: str = "argus-hackathon-secret-change-in-prod"
+    jwt_secret: str
     jwt_algorithm: str = "HS256"
     jwt_expiry_hours: int = 24
 
