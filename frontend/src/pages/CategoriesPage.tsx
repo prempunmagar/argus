@@ -23,11 +23,13 @@ export function CategoriesPage() {
   >(undefined)
 
   useEffect(() => {
+    if (!currentProfile) return  // wait for profile to load before fetching
+
     async function load() {
+      setLoading(true)
       try {
-        const profileParam = currentProfile ? `?profile_id=${currentProfile.id}` : ""
         const [catRes, pmRes] = await Promise.all([
-          api.get(`/categories${profileParam}`),
+          api.get(`/categories?profile_id=${currentProfile.id}`),
           api.get("/payment-methods").catch(() => ({ data: { payment_methods: [] } })),
         ])
         setCategories(catRes.data.categories)

@@ -16,10 +16,12 @@ export function ConnectionKeysPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
 
   useEffect(() => {
+    if (!currentProfile) return
+
     async function load() {
+      setLoading(true)
       try {
-        const profileParam = currentProfile ? `?profile_id=${currentProfile.id}` : ""
-        const { data } = await api.get(`/connection-keys${profileParam}`)
+        const { data } = await api.get(`/connection-keys?profile_id=${currentProfile.id}`)
         setKeys(data.connection_keys ?? data.keys ?? data)
       } catch {
         setKeys([])
