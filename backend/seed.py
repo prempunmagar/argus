@@ -107,7 +107,7 @@ def seed():
         db.flush()
         db.add_all([
             CategoryRule(category_id="cat_electronics_001", rule_type="MAX_PER_TRANSACTION", value="500.00"),
-            CategoryRule(category_id="cat_electronics_001", rule_type="AUTO_APPROVE_UNDER", value="100.00"),
+            CategoryRule(category_id="cat_electronics_001", rule_type="AUTO_APPROVE_UNDER", value="550.00"),
             CategoryRule(category_id="cat_electronics_001", rule_type="MONTHLY_LIMIT", value="2000.00"),
         ])
 
