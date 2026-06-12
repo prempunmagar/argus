@@ -130,6 +130,76 @@ async def _check_url_reachable(url: str) -> str | None:
         return None
 
 
+async def _verify_product_price(product_url: str, claimed_price: float) -> dict:
+    """
+    Fetch the product page and use Gemini to extract the real price.
+    Returns a dict with: verified (bool), actual_price (float|None), risk_flag (str|None)
+    """
+    if not product_url:
+        return {"verified": False, "actual_price": None, "risk_flag": None}
+
+    try:
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0.0.0 Safari/537.36"
+            ),
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        async with httpx.AsyncClient(follow_redirects=True, timeout=8.0, headers=headers) as client:
+            resp = await client.get(product_url)
+            if resp.status_code != 200:
+                logger.warning(f"Price verification: got {resp.status_code} for {product_url}")
+                return {"verified": False, "actual_price": None, "risk_flag": None}
+            html = resp.text[:15000]  # first 15k chars is enough for price
+    except Exception as e:
+        logger.warning(f"Price verification fetch failed: {e}")
+        return {"verified": False, "actual_price": None, "risk_flag": None}
+
+    # Ask Gemini to extract the price from the page HTML
+    try:
+        from app.config import settings
+        import google.generativeai as genai
+        genai.configure(api_key=settings.google_api_key)
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        prompt = (
+            f"Extract the current sale price of the main product on this page. "
+            f"Return ONLY a JSON object like: {{\"price\": 99.99}} or {{\"price\": null}} if not found.\n\n"
+            f"PAGE HTML (truncated):\n{html}"
+        )
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                temperature=0.0,
+                response_mime_type="application/json",
+            ),
+        )
+        result = json.loads(response.text)
+        actual_price = result.get("price")
+    except Exception as e:
+        logger.warning(f"Price verification Gemini call failed: {e}")
+        return {"verified": False, "actual_price": None, "risk_flag": None}
+
+    if actual_price is None:
+        return {"verified": False, "actual_price": None, "risk_flag": None}
+
+    # Compare — flag if difference is more than 5% or $5
+    diff = abs(actual_price - claimed_price)
+    pct_diff = diff / claimed_price if claimed_price > 0 else 0
+
+    if pct_diff > 0.05 and diff > 5:
+        risk_flag = (
+            f"Price mismatch: agent claimed ${claimed_price:.2f} "
+            f"but product page shows ${actual_price:.2f} "
+            f"(difference: ${diff:.2f})"
+        )
+        logger.warning(risk_flag)
+        return {"verified": True, "actual_price": actual_price, "risk_flag": risk_flag}
+
+    return {"verified": True, "actual_price": actual_price, "risk_flag": None}
+
+
 def _build_reason(decision: str, checks: list, category_name: str, ai_reasoning: str = None) -> str:
     """Build a human-readable reason string."""
     if decision == "APPROVE":
@@ -206,6 +276,12 @@ async def run_evaluate_pipeline(
             timeout_seconds=None,
             hedera_tx_id=None,
         )
+
+    # Step 2b: Verify product price against actual page (non-blocking if it fails)
+    price_check = await _verify_product_price(product.product_url, product.price)
+    price_risk_flag = price_check.get("risk_flag")
+    if price_check.get("actual_price") and not price_risk_flag:
+        logger.info(f"Price verified: agent claimed ${product.price}, page shows ${price_check['actual_price']}")
 
     # Step 3: Create Transaction row
     request_data = json.dumps(request.model_dump())
@@ -331,13 +407,16 @@ async def run_evaluate_pipeline(
             },
             "product": {
                 "product_name": product.product_name,
-                "price": product.price,
+                "price_claimed_by_agent": product.price,
+                "price_verified_on_page": price_check.get("actual_price"),
+                "price_verified": price_check.get("verified", False),
                 "currency": product.currency,
                 "merchant_name": product.merchant_name,
                 "merchant_url": product.merchant_url,
             },
             "rules_outcome": outcome,
             "rules_results": checks,
+            **({"price_mismatch_warning": price_risk_flag} if price_risk_flag else {}),
         }
 
         call2_result = await make_final_decision(report, custom_rules_for_call2 or None)
@@ -346,6 +425,12 @@ async def run_evaluate_pipeline(
         ai_reasoning = call2_result.get("reasoning")
         intent_match = call2_result.get("intent_match")
         risk_flags = call2_result.get("risk_flags", [])
+        # Inject price mismatch as a risk flag so it shows on the dashboard
+        if price_risk_flag:
+            risk_flags = list(risk_flags) + [price_risk_flag]
+            if decision == "APPROVE":
+                decision = "HUMAN_NEEDED"
+                ai_reasoning = f"Price mismatch detected: {price_risk_flag}"
         custom_rule_results = call2_result.get("custom_rule_results", [])
         call2_confidence = call2_result.get("confidence", 0.0)
 
