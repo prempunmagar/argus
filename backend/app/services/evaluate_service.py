@@ -162,7 +162,7 @@ async def _verify_product_price(product_url: str, claimed_price: float) -> dict:
         from app.config import settings
         import google.generativeai as genai
         genai.configure(api_key=settings.google_api_key)
-        model = genai.GenerativeModel("gemini-2.0-flash")
+        model = genai.GenerativeModel("gemini-3-flash-preview")
         prompt = (
             f"Extract the current sale price of the main product on this page. "
             f"Return ONLY a JSON object like: {{\"price\": 99.99}} or {{\"price\": null}} if not found.\n\n"
