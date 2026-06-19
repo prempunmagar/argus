@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     use_mock_cards: bool = True
 
     # CORS
-    cors_origins: str = "http://localhost:3000,http://localhost:5173"
+    cors_origins: str = "https://argus-principia.vercel.app,http://localhost:5173"
 
     # Hedera Audit Logging
     use_hedera: bool = False
